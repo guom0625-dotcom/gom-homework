@@ -1,0 +1,178 @@
+/* ─────────────────────────────────────────────
+   gomHomework — design tokens
+   미니멀 게임 스타일, 컬러풀 모험 지도 컨셉
+   ───────────────────────────────────────────── */
+
+:root {
+  /* Brand colors — 비비드 게임 컬러 */
+  --ocean-50:  #e6fbf6;
+  --ocean-100: #b8f1e1;
+  --ocean-200: #6fe3c4;
+  --ocean-300: #2dd4a4;
+  --ocean-500: #00b894;
+  --ocean-700: #008870;
+
+  --sky-100: #d6ecff;
+  --sky-300: #7ec8ff;
+  --sky-500: #3a96ff;
+  --sky-700: #1d6fd0;
+
+  --coral-300: #ffb39a;
+  --coral-500: #ff6b6b;
+  --coral-700: #d94545;
+
+  --sun-300: #ffe070;
+  --sun-500: #ffc83a;
+  --sun-700: #e0a800;
+
+  --grape-300: #c6b5ff;
+  --grape-500: #7b61ff;
+  --grape-700: #4d36c4;
+
+  --mint-500: #7ee0a8;
+
+  /* Gems */
+  --gem-amethyst: #b076ff;
+  --gem-ruby:     #ff5a7a;
+  --gem-emerald:  #2dd4a4;
+  --gem-sapphire: #3a96ff;
+  --gem-topaz:    #ffc83a;
+
+  /* Neutrals — warm cream */
+  --paper:      #fffaf2;
+  --paper-2:    #fdf3df;
+  --ink-900:    #1d2330;
+  --ink-700:    #3a4254;
+  --ink-500:    #6b7488;
+  --ink-300:    #b6bdcc;
+  --ink-200:    #d9deea;
+  --ink-100:    #ebeef5;
+
+  /* Surface */
+  --card:       #ffffff;
+  --card-shadow: 0 2px 0 rgba(29,35,48,0.08), 0 8px 24px rgba(29,35,48,0.06);
+  --card-shadow-lg: 0 4px 0 rgba(29,35,48,0.1), 0 18px 40px rgba(29,35,48,0.1);
+
+  /* Sea background gradient */
+  --sea-bg: linear-gradient(180deg, #b4e6ff 0%, #88d1f5 35%, #5ab6e8 100%);
+  --night-bg: linear-gradient(180deg, #2a2456 0%, #4a3a8c 60%, #6049b0 100%);
+
+  /* Radius */
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+
+  /* Type */
+  --font-display: 'Jua', 'Fredoka', system-ui, sans-serif;
+  --font-body: 'Noto Sans KR', 'Fredoka', system-ui, sans-serif;
+  --font-num: 'Fredoka', 'Jua', system-ui, sans-serif;
+}
+
+/* App-root reset (inside the phone frame) */
+.app {
+  font-family: var(--font-body);
+  color: var(--ink-900);
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+.app *, .app *::before, .app *::after { box-sizing: border-box; }
+
+.display { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.01em; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 500; }
+
+/* Button — primary */
+.btn {
+  font-family: var(--font-display);
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 14px 24px;
+  font-size: 17px;
+  background: var(--ocean-500);
+  color: #fff;
+  box-shadow: 0 4px 0 var(--ocean-700);
+  cursor: pointer;
+  transition: transform .08s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--ocean-700); }
+.btn--coral { background: var(--coral-500); box-shadow: 0 4px 0 var(--coral-700); }
+.btn--coral:active { box-shadow: 0 2px 0 var(--coral-700); }
+.btn--sun { background: var(--sun-500); box-shadow: 0 4px 0 var(--sun-700); color: var(--ink-900); }
+.btn--sun:active { box-shadow: 0 2px 0 var(--sun-700); }
+.btn--grape { background: var(--grape-500); box-shadow: 0 4px 0 var(--grape-700); }
+.btn--grape:active { box-shadow: 0 2px 0 var(--grape-700); }
+.btn--ghost {
+  background: #fff; color: var(--ink-900);
+  box-shadow: 0 4px 0 var(--ink-200), inset 0 0 0 1.5px var(--ink-200);
+}
+.btn--ghost:active { box-shadow: 0 2px 0 var(--ink-200), inset 0 0 0 1.5px var(--ink-200); }
+.btn--full { width: 100%; }
+.btn--lg { padding: 18px 28px; font-size: 20px; }
+.btn--sm { padding: 10px 16px; font-size: 14px; }
+
+/* Card */
+.card {
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--card-shadow);
+}
+
+/* Chip */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  background: var(--ink-100);
+  color: var(--ink-700);
+  font-weight: 500;
+}
+.chip--ocean { background: var(--ocean-100); color: var(--ocean-700); }
+.chip--coral { background: #ffe2d6; color: var(--coral-700); }
+.chip--sun   { background: #fff1c2; color: var(--sun-700); }
+.chip--grape { background: #ebe3ff; color: var(--grape-700); }
+.chip--sky   { background: var(--sky-100); color: var(--sky-700); }
+
+/* Status dot */
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.dot--green { background: #2dd47a; box-shadow: 0 0 0 4px rgba(45,212,122,.18); }
+.dot--amber { background: var(--sun-500); box-shadow: 0 0 0 4px rgba(255,200,58,.22); }
+.dot--coral { background: var(--coral-500); box-shadow: 0 0 0 4px rgba(255,107,107,.22); }
+.dot--ink   { background: var(--ink-300); }
+
+/* Gem (small inline) */
+.gem-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-num);
+  font-weight: 500;
+}
+
+/* Wavy water shimmer (decorative) */
+.water-shimmer {
+  background:
+    repeating-linear-gradient(110deg, transparent 0 18px, rgba(255,255,255,.18) 18px 20px, transparent 20px 44px);
+}
+
+/* Faint dotted path */
+.path-dots {
+  background-image: radial-gradient(circle, rgba(255,255,255,.85) 1.5px, transparent 2px);
+  background-size: 12px 12px;
+  background-repeat: repeat;
+}
+
+/* Scrollbar hide inside frame */
+.app ::-webkit-scrollbar { display: none; }
+.app * { scrollbar-width: none; }
+
+/* Tiny utility */
+.divider { height: 1px; background: var(--ink-100); }
