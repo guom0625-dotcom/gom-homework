@@ -1,0 +1,57 @@
+import { z } from 'zod';
+import type { FastifyInstance } from 'fastify';
+import type { Db } from '../db.ts';
+import type { AuthHandler } from '../index.ts';
+import { GEM_TYPES } from '../lib/gems.ts';
+
+const PatchBody = z.object({
+    name: z.string().min(1).max(30).optional(),
+    push_token: z.string().nullable().optional(),
+});
+
+export function registerMeRoutes(app: FastifyInstance, db: Db, auth: AuthHandler): void {
+    app.get('/me', { preHandler: auth }, async (req) => {
+        const user = db.prepare('SELECT id, name, role, push_token FROM users WHERE id = ?')
+            .get(req.user.id) as { id: string; name: string; role: string; push_token: string | null };
+
+        const result: Record<string, unknown> = { ...user };
+
+        if (user.role === 'student') {
+            const gems = db.prepare('SELECT * FROM gems_balance WHERE student_id = ?')
+                .get(req.user.id) as Record<string, number> | undefined;
+            result.gems = gems ?? null;
+
+            const link = db.prepare(`
+                SELECT u.id, u.name FROM manager_student_link l
+                JOIN users u ON u.id = l.manager_id
+                WHERE l.student_id = ?
+            `).get(req.user.id);
+            result.manager = link ?? null;
+        }
+
+        if (user.role === 'manager') {
+            const students = db.prepare(`
+                SELECT u.id, u.name FROM manager_student_link l
+                JOIN users u ON u.id = l.student_id
+                WHERE l.manager_id = ?
+            `).all(req.user.id);
+            result.students = students;
+        }
+
+        return result;
+    });
+
+    app.patch('/me', { preHandler: auth }, async (req, reply) => {
+        const body = PatchBody.safeParse(req.body);
+        if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
+
+        const { name, push_token } = body.data;
+        if (name !== undefined) {
+            db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, req.user.id);
+        }
+        if (push_token !== undefined) {
+            db.prepare('UPDATE users SET push_token = ? WHERE id = ?').run(push_token, req.user.id);
+        }
+        return { ok: true };
+    });
+}
