@@ -1,0 +1,28 @@
+# ── Node ──────────────────────────────────────
+node_modules/
+npm-debug.log*
+
+# ── Expo / React Native ───────────────────────
+app/.expo/
+app/dist/
+app/android/        # expo prebuild로 CI에서 매번 생성
+app/ios/
+*.apk
+*.aab
+*.ipa
+
+# ── Server (Phase 2) ──────────────────────────
+server/data/        # SQLite 파일
+server/logs/
+server/.env
+# firebase-admin 크리덴셜 등 비밀 JSON
+server/*-credentials.json
+server/*-adminsdk-*.json
+
+# ── 시스템 ────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.pem
+*.key
+*.jks
+*.keystore
