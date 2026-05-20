@@ -54,4 +54,12 @@ export function registerMeRoutes(app: FastifyInstance, db: Db, auth: AuthHandler
         }
         return { ok: true };
     });
+
+    // GET /progress  (student — own day progress)
+    app.get('/progress', { preHandler: auth }, async (req, reply) => {
+        if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
+        return db.prepare(
+            'SELECT * FROM day_progress WHERE student_id = ? ORDER BY day ASC'
+        ).all(req.user.id);
+    });
 }

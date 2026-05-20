@@ -1,0 +1,93 @@
+import React, { useEffect } from 'react';
+import { View, ActivityIndicator } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useAuthStore } from '../store/authStore';
+import { useAppStore } from '../store/appStore';
+import { WelcomeScreen } from '../screens/auth/WelcomeScreen';
+import { PairingScreen } from '../screens/auth/PairingScreen';
+import { MainHorizontal } from '../screens/student/MainHorizontal';
+import { TaskListScreen } from '../screens/student/TaskList';
+import { TaskRegisterScreen } from '../screens/student/TaskRegister';
+import { DashboardScreen } from '../screens/manager/Dashboard';
+import { ApprovalScreen } from '../screens/manager/Approval';
+import { colors } from '../theme';
+
+export type AuthStackParams = {
+    Welcome: undefined;
+    Pairing: undefined;
+    StudentMain: undefined;
+};
+
+export type StudentStackParams = {
+    Main: undefined;
+    TaskList: { day: number };
+    TaskRegister: { day: number };
+};
+
+export type ManagerStackParams = {
+    Dashboard: undefined;
+    Approval: { studentId: string; studentName: string };
+};
+
+const AuthStack = createNativeStackNavigator<AuthStackParams>();
+const StudentStack = createNativeStackNavigator<StudentStackParams>();
+const ManagerStack = createNativeStackNavigator<ManagerStackParams>();
+
+function StudentNavigator() {
+    return (
+        <StudentStack.Navigator screenOptions={{ headerShown: false }}>
+            <StudentStack.Screen name="Main" component={MainHorizontal} />
+            <StudentStack.Screen name="TaskList" component={TaskListScreen} />
+            <StudentStack.Screen name="TaskRegister" component={TaskRegisterScreen} />
+        </StudentStack.Navigator>
+    );
+}
+
+function ManagerNavigator() {
+    return (
+        <ManagerStack.Navigator screenOptions={{ headerShown: false }}>
+            <ManagerStack.Screen name="Dashboard" component={DashboardScreen} />
+            <ManagerStack.Screen name="Approval" component={ApprovalScreen} />
+        </ManagerStack.Navigator>
+    );
+}
+
+export function RootNavigator() {
+    const { user, isLoading, init } = useAuthStore();
+    const { fetchMe, reset } = useAppStore();
+
+    useEffect(() => { init(); }, []);
+
+    useEffect(() => {
+        if (user) {
+            fetchMe().catch(() => {});
+        } else {
+            reset();
+        }
+    }, [user?.id]);
+
+    if (isLoading) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.paper }}>
+                <ActivityIndicator size="large" color={colors.ocean[500]} />
+            </View>
+        );
+    }
+
+    return (
+        <NavigationContainer>
+            {!user ? (
+                <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+                    <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
+                    <AuthStack.Screen name="Pairing" component={PairingScreen} />
+                    <AuthStack.Screen name="StudentMain" component={StudentNavigator as React.ComponentType} />
+                </AuthStack.Navigator>
+            ) : user.role === 'student' ? (
+                <StudentNavigator />
+            ) : (
+                <ManagerNavigator />
+            )}
+        </NavigationContainer>
+    );
+}

@@ -11,7 +11,7 @@ import {
   Fredoka_500Medium,
 } from '@expo-google-fonts/fredoka';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { MainHorizontal } from './src/screens/student/MainHorizontal';
+import { RootNavigator } from './src/navigation/RootNavigator';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -26,12 +26,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <MainHorizontal
-        currentDay={7}
-        character="bear"
-        points={124}
-        status="pending"
-      />
+      <RootNavigator />
     </SafeAreaProvider>
   );
 }

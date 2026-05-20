@@ -229,6 +229,22 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         return { ok: true };
     });
 
+    // POST /day/:day/complete  (student only — advance day after manager approval)
+    app.post('/day/:day/complete', { preHandler: auth }, async (req, reply) => {
+        if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
+        const day = Number((req.params as { day: string }).day);
+        const row = db.prepare(
+            'SELECT status FROM day_progress WHERE student_id = ? AND day = ?'
+        ).get(req.user.id, day) as { status: string } | undefined;
+        if (!row || row.status !== 'approved') {
+            return reply.code(409).send({ error: 'not_approved' });
+        }
+        db.prepare(
+            "UPDATE day_progress SET status = 'complete', updated_at = ? WHERE student_id = ? AND day = ?"
+        ).run(Date.now(), req.user.id, day);
+        return { ok: true };
+    });
+
     // DELETE /tasks/:id  (student, todo status only)
     app.delete('/tasks/:id', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });

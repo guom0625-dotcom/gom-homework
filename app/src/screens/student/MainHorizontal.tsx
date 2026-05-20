@@ -1,8 +1,10 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { TopHud } from '../../components/TopHud';
 import { IslandTile } from '../../components/IslandTile';
 import { Character } from '../../components/Character';
@@ -14,14 +16,9 @@ import { StatusBanner } from '../../components/StatusBanner';
 import { colors, fontFamilies, fontSizes, gradients, radius, shadows } from '../../theme';
 import type { CharacterType, DayStatus, IslandState } from '../../lib/types';
 import type { GemColor } from '../../theme';
-
-interface MainHorizontalProps {
-  currentDay?: number;
-  character?: CharacterType;
-  points?: number;
-  status?: DayStatus;
-  photoUrl?: string;
-}
+import type { StudentStackParams } from '../../navigation/RootNavigator';
+import { useAuthStore } from '../../store/authStore';
+import { useAppStore } from '../../store/appStore';
 
 const TOTAL_DAYS = 30;
 const ISLAND_COUNT = 14;
@@ -33,7 +30,6 @@ const GEM_COLORS: GemColor[] = ['amethyst', 'ruby', 'emerald', 'sapphire', 'topa
 const BONUS_DAYS = new Set([7, 14, 21, 30]);
 
 function islandState(day: number, currentDay: number): IslandState {
-  // handoff의 상태 결정 로직을 verbatim 포팅 (단순화 금지)
   const state: IslandState =
     day < currentDay ? 'complete'
     : day === currentDay ? 'current'
@@ -52,51 +48,58 @@ function islandState(day: number, currentDay: number): IslandState {
 
 const ACTION_LABEL: Record<DayStatus, string> = {
   todo:     '오늘의 할일 등록',
-  pending:  '검토 상태 보기',
-  approved: '다음 섬으로 가기',
+  pending:  '할일 목록 보기',
+  approved: '다음 섬으로 가기 🚀',
   complete: '내일 다시 도전',
 };
 
-export function MainHorizontal({
-  currentDay = 7,
-  character = 'bear',
-  points = 124,
-  status = 'pending',
-  photoUrl,
-}: MainHorizontalProps) {
+export function MainHorizontal() {
+  const navigation = useNavigation<NativeStackNavigationProp<StudentStackParams>>();
+  const { user, logout } = useAuthStore();
+  const { currentDay, dayStatus, points, gems, fetchMe, completeDay } = useAppStore();
+
+  const character: CharacterType = 'bear';
   const islands = Array.from({ length: ISLAND_COUNT }, (_, i) => i + 1);
 
-  // 섬 x, y 좌표 (사인파 곡선)
   const islandX = (i: number) => 50 + i * ISLAND_STEP;
   const islandY = (i: number) => 200 + Math.sin(i * 0.6) * 50;
 
-  // 점선 path data
   const pathD = islands
     .map((_, i) => `${i === 0 ? 'M' : 'L'} ${islandX(i)} ${islandY(i)}`)
     .join(' ');
 
-  const daysUntilBonus = 7 - (currentDay % 7);
+  const daysUntilBonus = 7 - (currentDay % 7) || 7;
+
+  const handleMainAction = async () => {
+    if (dayStatus === 'todo') {
+      navigation.navigate('TaskRegister', { day: currentDay });
+    } else if (dayStatus === 'pending') {
+      navigation.navigate('TaskList', { day: currentDay });
+    } else if (dayStatus === 'approved') {
+      try {
+        await completeDay(currentDay);
+      } catch (e: unknown) {
+        Alert.alert('오류', e instanceof Error ? e.message : '오류가 발생했어요');
+      }
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <LinearGradient colors={gradients.sea} style={styles.bg}>
-        {/* 구름 장식 — 절대 위치 */}
         <Cloud size={70}  opacity={0.8}  style={styles.cloud1} />
         <Cloud size={50}  opacity={0.65} style={styles.cloud2} />
         <Cloud size={90}  opacity={0.55} style={styles.cloud3} />
 
-        {/* HUD */}
         <View style={styles.hudWrap}>
           <TopHud
-            name="지호"
+            name={user?.name ?? ''}
             character={character}
             points={points}
             streak={currentDay}
-            photoUrl={photoUrl}
           />
         </View>
 
-        {/* DAY 큰 표시 */}
         <View style={styles.dayBlock}>
           <View style={styles.dayRow}>
             <Text style={styles.dayLabel}>오늘은</Text>
@@ -107,14 +110,12 @@ export function MainHorizontal({
           </Text>
         </View>
 
-        {/* 바다 지도 — 가로 스크롤 */}
         <View style={styles.mapArea}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ width: MAP_WIDTH, height: MAP_HEIGHT }}
           >
-            {/* 점선 경로 SVG */}
             <Svg
               width={MAP_WIDTH}
               height={MAP_HEIGHT}
@@ -130,7 +131,6 @@ export function MainHorizontal({
               />
             </Svg>
 
-            {/* 섬들 */}
             {islands.map((day, i) => {
               const x = islandX(i);
               const y = islandY(i);
@@ -148,7 +148,7 @@ export function MainHorizontal({
                     size={80}
                     character={
                       isCurrent ? (
-                        <Character type={character} size={48} mood="happy" photoUrl={photoUrl} />
+                        <Character type={character} size={48} mood="happy" />
                       ) : undefined
                     }
                     gem={<Gem size={30} color={GEM_COLORS[day % 5]} />}
@@ -157,34 +157,45 @@ export function MainHorizontal({
               );
             })}
 
-            {/* 야자수 장식 */}
             <Palm size={36} style={{ position: 'absolute', left: 22, top: 130 }} />
           </ScrollView>
         </View>
 
-        {/* 하단 paper 시트 */}
         <View style={styles.bottomSheet}>
-          <StatusBanner status={status} day={currentDay} />
+          <StatusBanner status={dayStatus} day={currentDay} />
 
           <View style={styles.actionRow}>
-            {/* 할일 목록 버튼 */}
             <View style={styles.sideBtn}>
-              <Button variant="ghost" size="md" label="📋" style={styles.squareBtn} />
-            </View>
-
-            {/* 메인 액션 버튼 */}
-            <View style={{ flex: 1 }}>
               <Button
-                variant="coral"
+                variant="ghost"
                 size="md"
-                label={ACTION_LABEL[status]}
-                style={styles.fullBtn}
+                label="📋"
+                style={styles.squareBtn}
+                onPress={() => navigation.navigate('TaskList', { day: currentDay })}
               />
             </View>
 
-            {/* 보석 보기 버튼 */}
+            <View style={{ flex: 1 }}>
+              <Button
+                variant={dayStatus === 'approved' ? 'ocean' : 'coral'}
+                size="md"
+                label={ACTION_LABEL[dayStatus]}
+                style={styles.fullBtn}
+                onPress={handleMainAction}
+              />
+            </View>
+
             <View style={styles.sideBtn}>
-              <Button variant="ghost" size="md" label="💎" style={styles.squareBtn} />
+              <Button
+                variant="ghost"
+                size="md"
+                label="⚙️"
+                style={styles.squareBtn}
+                onPress={() => Alert.alert('로그아웃', '정말 로그아웃할까요?', [
+                  { text: '취소', style: 'cancel' },
+                  { text: '로그아웃', style: 'destructive', onPress: logout },
+                ])}
+              />
             </View>
           </View>
         </View>
@@ -194,27 +205,16 @@ export function MainHorizontal({
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  bg: {
-    flex: 1,
-    position: 'relative',
-  },
-
-  // 구름
+  safeArea: { flex: 1 },
+  bg: { flex: 1, position: 'relative' },
   cloud1: { position: 'absolute', top: 16,  left: 14 },
   cloud2: { position: 'absolute', top: 60,  right: 30 },
   cloud3: { position: 'absolute', top: 110, left: 130 },
-
-  // HUD
   hudWrap: {
     paddingHorizontal: 12,
     paddingTop: 12,
     zIndex: 5,
   },
-
-  // DAY 표시
   dayBlock: {
     paddingHorizontal: 16,
     paddingTop: 14,
@@ -248,13 +248,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
     marginTop: 2,
   },
-
-  // 지도 영역
-  mapArea: {
-    flex: 1,
-  },
-
-  // 하단 시트
+  mapArea: { flex: 1 },
   bottomSheet: {
     backgroundColor: colors.paper,
     borderTopLeftRadius: 24,
@@ -263,7 +257,6 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 16,
     zIndex: 5,
-    // iOS shadow (Android elevation 역방향 적용 안 됨 — 알려진 제약)
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -8 },
     shadowOpacity: 0.1,
@@ -276,13 +269,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     alignItems: 'center',
   },
-  sideBtn: {
-    width: 52,
-  },
-  squareBtn: {
-    alignSelf: 'stretch',
-  },
-  fullBtn: {
-    alignSelf: 'stretch',
-  },
+  sideBtn: { width: 52 },
+  squareBtn: { alignSelf: 'stretch' },
+  fullBtn: { alignSelf: 'stretch' },
 });
