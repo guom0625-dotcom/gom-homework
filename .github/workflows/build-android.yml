@@ -33,6 +33,17 @@ jobs:
         with:
           gradle-version: '8.13'
 
+      # Gradle 의존성 캐시 — 키를 package-lock.json 기반으로 고정
+      # (android/는 매번 재생성되므로 build.gradle 기반 캐시는 항상 미스)
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper/dists
+          key: gradle-${{ hashFiles('app/package-lock.json') }}
+          restore-keys: gradle-
+
       # ── 1. 버전 결정 ──────────────────────────────
       - name: Resolve version
         id: ver
