@@ -17,6 +17,7 @@ interface AuthState {
 
     init: () => Promise<void>;
     signup: (name: string, role: 'manager' | 'student') => Promise<void>;
+    loginWithKey: (key: string) => Promise<void>;
     logout: () => Promise<void>;
 }
 
@@ -47,6 +48,19 @@ export const useAuthStore = create<AuthState>((set) => ({
         await SecureStore.setItemAsync(STORE_KEY, res.key);
         setApiKey(res.key);
         set({ key: res.key, user: { id: res.id, name: res.name, role: res.role } });
+    },
+
+    loginWithKey: async (key) => {
+        const trimmed = key.trim();
+        setApiKey(trimmed);
+        try {
+            const me = await api<AuthUser>('/me');
+            await SecureStore.setItemAsync(STORE_KEY, trimmed);
+            set({ key: trimmed, user: { id: me.id, name: me.name, role: me.role } });
+        } catch (e) {
+            setApiKey(null);
+            throw e;
+        }
     },
 
     logout: async () => {

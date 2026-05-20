@@ -15,16 +15,21 @@ type Props = { navigation: NativeStackNavigationProp<AuthStackParams, 'Welcome'>
 export function WelcomeScreen({ navigation }: Props) {
     const [role, setRole] = useState<'manager' | 'student'>('student');
     const [name, setName] = useState('');
+    const [managerKey, setManagerKey] = useState('');
     const [loading, setLoading] = useState(false);
-    const signup = useAuthStore(s => s.signup);
+    const { signup, loginWithKey } = useAuthStore();
 
     const handleStart = async () => {
-        const trimmed = name.trim();
-        if (!trimmed) { Alert.alert('이름을 입력해주세요'); return; }
         setLoading(true);
         try {
-            await signup(trimmed, role);
-            if (role === 'student') navigation.replace('Pairing');
+            if (role === 'manager') {
+                if (!managerKey.trim()) { Alert.alert('키를 입력해주세요'); return; }
+                await loginWithKey(managerKey);
+            } else {
+                if (!name.trim()) { Alert.alert('이름을 입력해주세요'); return; }
+                await signup(name.trim(), 'student');
+                navigation.replace('Pairing');
+            }
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : '오류가 발생했어요';
             Alert.alert('오류', msg);
@@ -60,17 +65,35 @@ export function WelcomeScreen({ navigation }: Props) {
                             ))}
                         </View>
 
-                        <Text style={[styles.label, { marginTop: 20 }]}>이름</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="이름을 입력하세요"
-                            placeholderTextColor={colors.ink[300]}
-                            value={name}
-                            onChangeText={setName}
-                            maxLength={20}
-                            returnKeyType="done"
-                            onSubmitEditing={handleStart}
-                        />
+                        {role === 'student' ? (
+                            <>
+                                <Text style={[styles.label, { marginTop: 20 }]}>이름</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="이름을 입력하세요"
+                                    placeholderTextColor={colors.ink[300]}
+                                    value={name}
+                                    onChangeText={setName}
+                                    maxLength={20}
+                                    returnKeyType="done"
+                                    onSubmitEditing={handleStart}
+                                />
+                            </>
+                        ) : (
+                            <>
+                                <Text style={[styles.label, { marginTop: 20 }]}>Bearer 키</Text>
+                                <TextInput
+                                    style={[styles.input, styles.keyInput]}
+                                    placeholder="서버에서 발급받은 키를 붙여넣으세요"
+                                    placeholderTextColor={colors.ink[300]}
+                                    value={managerKey}
+                                    onChangeText={setManagerKey}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    multiline
+                                />
+                            </>
+                        )}
 
                         <TouchableOpacity
                             style={[styles.startBtn, loading && styles.startBtnDisabled]}
@@ -79,7 +102,9 @@ export function WelcomeScreen({ navigation }: Props) {
                         >
                             {loading
                                 ? <ActivityIndicator color="#fff" />
-                                : <Text style={styles.startBtnText}>시작하기 🚀</Text>
+                                : <Text style={styles.startBtnText}>
+                                    {role === 'manager' ? '로그인 🔑' : '시작하기 🚀'}
+                                </Text>
                             }
                         </TouchableOpacity>
 
@@ -166,6 +191,12 @@ const styles = StyleSheet.create({
         fontSize: fontSizes.base,
         color: colors.ink[900],
         marginBottom: 20,
+    },
+    keyInput: {
+        minHeight: 72,
+        textAlignVertical: 'top',
+        fontSize: fontSizes.xs,
+        fontFamily: fontFamilies.body,
     },
     startBtn: {
         backgroundColor: colors.ocean[500],
