@@ -4,6 +4,10 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: '버전 (예: 1.2.3) — 미입력 시 run_number 사용'
+        required: false
 
 jobs:
   build:
@@ -29,18 +33,36 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      # ── 1. 의존성 설치 ────────────────────────
+      # ── 1. 버전 결정 ──────────────────────────────
+      - name: Resolve version
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            # 태그 push: v1.2.3 → 1.2.3
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="0.0.${{ github.run_number }}"
+          fi
+          echo "VERSION=$VERSION"          >> $GITHUB_ENV
+          echo "VERSION_CODE=${{ github.run_number }}" >> $GITHUB_ENV
+          echo "version=$VERSION"          >> $GITHUB_OUTPUT
+
+      # ── 2. 의존성 설치 ──────────────────────────
       - name: Install dependencies
         working-directory: app
         run: npm ci
 
-      # ── 2. Expo → android/ 생성 ───────────────
-      # android/ 는 gitignore → CI에서 매번 재생성
+      # ── 3. Expo → android/ 생성 ─────────────────
       - name: Expo prebuild (Android)
         working-directory: app
+        env:
+          EXPO_VERSION: ${{ env.VERSION }}
+          EXPO_VERSION_CODE: ${{ env.VERSION_CODE }}
         run: npx expo prebuild --platform android --no-install
 
-      # ── 3. 키스토어 복원 ──────────────────────
+      # ── 4. 키스토어 복원 ────────────────────────
       - name: Decode keystore
         working-directory: app
         env:
@@ -49,8 +71,7 @@ jobs:
           printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > android/app/keystore.jks
           echo "keystore size: $(wc -c < android/app/keystore.jks) bytes"
 
-      # ── 4. 서명 설정 주입 ─────────────────────
-      # expo prebuild가 생성한 build.gradle에 signingConfigs 추가
+      # ── 5. 서명 설정 주입 ───────────────────────
       - name: Inject signing config into build.gradle
         working-directory: app
         shell: python3 {0}
@@ -72,11 +93,9 @@ jobs:
               }}
           }}
           """
-          # signingConfigs 블록이 없을 경우만 삽입
           if "signingConfigs" not in content:
               content = content.replace("    buildTypes {", signing + "    buildTypes {", 1)
 
-          # release buildType에 signingConfig 참조 추가
           if "signingConfig signingConfigs.release" not in content:
               content = re.sub(
                   r"(buildTypes\s*\{[^}]*?release\s*\{)",
@@ -87,32 +106,29 @@ jobs:
           open(path, "w").write(content)
           print("build.gradle patched ✓")
 
-      # ── 5. APK 빌드 ───────────────────────────
+      # ── 6. APK 빌드 ─────────────────────────────
       - name: Build release APK
         working-directory: app/android
-        env:
-          VERSION_CODE: ${{ github.run_number }}
-          VERSION_NAME: ${{ github.ref_name }}
         run: gradle :app:assembleRelease
 
-      # ── 6. APK 이름 변경 ─────────────────────
+      # ── 7. APK 이름 변경 ────────────────────────
       - name: Rename APK
         run: |
-          TAG=${GITHUB_REF_NAME:-build-${{ github.run_number }}}
           mv app/android/app/build/outputs/apk/release/app-release.apk \
-             app/android/app/build/outputs/apk/release/gom-homework-${TAG}.apk
+             app/android/app/build/outputs/apk/release/gom-homework-v${{ steps.ver.outputs.version }}.apk
 
-      # ── 7. Artifact 업로드 (항상) ─────────────
+      # ── 8. Artifact 업로드 (항상) ────────────────
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: apk-${{ github.run_number }}
+          name: apk-v${{ steps.ver.outputs.version }}
           path: app/android/app/build/outputs/apk/release/*.apk
 
-      # ── 8. GitHub Release 생성 (태그 push 시) ──
+      # ── 9. GitHub Release 생성 (태그 push 시) ───
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          name: v${{ steps.ver.outputs.version }}
           files: app/android/app/build/outputs/apk/release/*.apk
           generate_release_notes: true
