@@ -24,6 +24,31 @@ export interface DayProgress {
     updated_at: number;
 }
 
+export interface CatalogItem {
+    id: string;
+    manager_id: string;
+    title: string;
+    description: string | null;
+    cost_topaz: number;
+    cost_emerald: number;
+    cost_sapphire: number;
+    cost_ruby: number;
+    cost_amethyst: number;
+    active: number;
+    created_at: number;
+}
+
+export interface SpendRequest {
+    id: string;
+    student_id: string;
+    catalog_id: string;
+    catalog_title: string;
+    status: 'pending' | 'approved' | 'rejected';
+    reviewed_at: number | null;
+    created_at: number;
+    student_name?: string;
+}
+
 export interface StudentSummary {
     id: string;
     name: string;
@@ -70,6 +95,11 @@ interface AppState {
     gems: GemInventory;
     dayStatus: DayStatus;
 
+    // student — catalog & spend
+    catalog: CatalogItem[];
+    fetchCatalog: () => Promise<void>;
+    requestSpend: (catalogId: string) => Promise<void>;
+
     // manager
     students: StudentSummary[];
     selectedStudentTasks: Task[];
@@ -97,6 +127,7 @@ const initialState = {
     points: 0,
     gems: { ...EMPTY_INVENTORY },
     dayStatus: 'todo' as DayStatus,
+    catalog: [] as CatalogItem[],
     students: [],
     selectedStudentTasks: [],
 };
@@ -159,6 +190,22 @@ export const useAppStore = create<AppState>((set, get) => ({
         const tasks = await api<Task[]>(`/tasks?day=${currentDay}`);
         const dayStatus = computeDayStatus(tasks, dayProgress, currentDay);
         set({ dayProgress, currentDay, tasks, dayStatus });
+    },
+
+    fetchCatalog: async () => {
+        const catalog = await api<CatalogItem[]>('/catalog');
+        set({ catalog });
+    },
+
+    requestSpend: async (catalogId) => {
+        await api('/spend-requests', {
+            method: 'POST',
+            body: JSON.stringify({ catalog_id: catalogId }),
+        });
+        // 보석 잔고 갱신
+        const me = await api<{ gems: GemInventory }>('/me');
+        const gems = me.gems ?? EMPTY_INVENTORY;
+        set({ gems, points: gemsToPoints(gems) });
     },
 
     fetchStudents: async () => {

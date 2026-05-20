@@ -189,6 +189,16 @@ export function MainHorizontal() {
               <Button
                 variant="ghost"
                 size="md"
+                label="💎"
+                style={styles.squareBtn}
+                onPress={() => navigation.navigate('Spend')}
+              />
+            </View>
+
+            <View style={styles.sideBtn}>
+              <Button
+                variant="ghost"
+                size="md"
                 label="⚙️"
                 style={styles.squareBtn}
                 onPress={() => Alert.alert('로그아웃', '정말 로그아웃할까요?', [

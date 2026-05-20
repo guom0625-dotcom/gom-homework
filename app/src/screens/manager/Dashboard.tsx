@@ -80,16 +80,32 @@ export function DashboardScreen({ navigation }: Props) {
                 contentContainerStyle={styles.list}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
                 ListHeaderComponent={
-                    <TouchableOpacity
-                        style={[styles.codeBtn, codeLoading && { opacity: 0.6 }]}
-                        onPress={handleGenerateCode}
-                        disabled={codeLoading}
-                    >
-                        {codeLoading
-                            ? <ActivityIndicator color={colors.ocean[700]} />
-                            : <Text style={styles.codeBtnText}>🔗 학생 초대 코드 생성</Text>
-                        }
-                    </TouchableOpacity>
+                    <View style={styles.headerBtns}>
+                        <TouchableOpacity
+                            style={[styles.codeBtn, codeLoading && { opacity: 0.6 }]}
+                            onPress={handleGenerateCode}
+                            disabled={codeLoading}
+                        >
+                            {codeLoading
+                                ? <ActivityIndicator color={colors.ocean[700]} />
+                                : <Text style={styles.codeBtnText}>🔗 학생 초대 코드 생성</Text>
+                            }
+                        </TouchableOpacity>
+                        <View style={styles.mgmtRow}>
+                            <TouchableOpacity
+                                style={styles.mgmtBtn}
+                                onPress={() => navigation.navigate('Catalog')}
+                            >
+                                <Text style={styles.mgmtBtnText}>🎁 보상 카탈로그</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.mgmtBtn}
+                                onPress={() => navigation.navigate('SpendApproval')}
+                            >
+                                <Text style={styles.mgmtBtnText}>💎 보상 요청</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
                 }
                 ListEmptyComponent={
                     <View style={styles.empty}>
@@ -155,12 +171,12 @@ const styles = StyleSheet.create({
         color: colors.ink[500],
     },
     list: { padding: 16, gap: 10 },
+    headerBtns: { gap: 8, marginBottom: 8 },
     codeBtn: {
         backgroundColor: colors.sky[100],
         borderRadius: radius.md,
         paddingVertical: 14,
         alignItems: 'center',
-        marginBottom: 8,
         borderWidth: 1.5,
         borderColor: colors.sky[300],
         borderStyle: 'dashed',
@@ -169,6 +185,20 @@ const styles = StyleSheet.create({
         fontFamily: fontFamilies.bodyMed,
         fontSize: fontSizes.base,
         color: colors.sky[700],
+    },
+    mgmtRow: { flexDirection: 'row', gap: 8 },
+    mgmtBtn: {
+        flex: 1,
+        backgroundColor: colors.card,
+        borderRadius: radius.md,
+        paddingVertical: 14,
+        alignItems: 'center',
+        ...shadows.card,
+    },
+    mgmtBtnText: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.base,
+        color: colors.ink[700],
     },
     empty: { paddingTop: 60, alignItems: 'center' },
     emptyText: {

@@ -11,6 +11,9 @@ import { TaskListScreen } from '../screens/student/TaskList';
 import { TaskRegisterScreen } from '../screens/student/TaskRegister';
 import { DashboardScreen } from '../screens/manager/Dashboard';
 import { ApprovalScreen } from '../screens/manager/Approval';
+import { CatalogScreen } from '../screens/manager/CatalogScreen';
+import { SpendApprovalScreen } from '../screens/manager/SpendApprovalScreen';
+import { SpendScreen } from '../screens/student/SpendScreen';
 import { colors } from '../theme';
 
 export type AuthStackParams = {
@@ -23,11 +26,14 @@ export type StudentStackParams = {
     Main: undefined;
     TaskList: { day: number };
     TaskRegister: { day: number };
+    Spend: undefined;
 };
 
 export type ManagerStackParams = {
     Dashboard: undefined;
     Approval: { studentId: string; studentName: string };
+    Catalog: undefined;
+    SpendApproval: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
@@ -40,6 +46,7 @@ function StudentNavigator() {
             <StudentStack.Screen name="Main" component={MainHorizontal} />
             <StudentStack.Screen name="TaskList" component={TaskListScreen} />
             <StudentStack.Screen name="TaskRegister" component={TaskRegisterScreen} />
+            <StudentStack.Screen name="Spend" component={SpendScreen} />
         </StudentStack.Navigator>
     );
 }
@@ -49,6 +56,8 @@ function ManagerNavigator() {
         <ManagerStack.Navigator screenOptions={{ headerShown: false }}>
             <ManagerStack.Screen name="Dashboard" component={DashboardScreen} />
             <ManagerStack.Screen name="Approval" component={ApprovalScreen} />
+            <ManagerStack.Screen name="Catalog" component={CatalogScreen} />
+            <ManagerStack.Screen name="SpendApproval" component={SpendApprovalScreen} />
         </ManagerStack.Navigator>
     );
 }
