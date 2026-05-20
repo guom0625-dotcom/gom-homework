@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "gomHomework",
+    "slug": "gom-homework",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#fffaf2"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.guom0625.gomhomework"
+    },
+    "android": {
+      "package": "com.guom0625.gomhomework",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#fffaf2"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font"
+    ]
+  }
+}
