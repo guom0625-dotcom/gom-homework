@@ -15,7 +15,9 @@ module.exports = {
       versionCode,
       permissions: [
         ...(base.expo.android.permissions ?? []),
-        'REQUEST_INSTALL_PACKAGES',   // APK 자체 업데이트용
+        'REQUEST_INSTALL_PACKAGES',
+        'ACCESS_FINE_LOCATION',
+        'ACCESS_WIFI_STATE',
       ],
     },
     plugins: [
