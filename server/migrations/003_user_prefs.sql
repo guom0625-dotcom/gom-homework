@@ -1,0 +1,2 @@
+ALTER TABLE users ADD COLUMN character TEXT NOT NULL DEFAULT 'bear';
+ALTER TABLE users ADD COLUMN avatar TEXT;

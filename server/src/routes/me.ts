@@ -7,12 +7,14 @@ import { GEM_TYPES } from '../lib/gems.ts';
 const PatchBody = z.object({
     name: z.string().min(1).max(30).optional(),
     push_token: z.string().nullable().optional(),
+    character: z.enum(['bear', 'fox', 'cat', 'owl']).optional(),
+    avatar: z.string().nullable().optional(),
 });
 
 export function registerMeRoutes(app: FastifyInstance, db: Db, auth: AuthHandler): void {
     app.get('/me', { preHandler: auth }, async (req) => {
-        const user = db.prepare('SELECT id, name, role, push_token FROM users WHERE id = ?')
-            .get(req.user.id) as { id: string; name: string; role: string; push_token: string | null };
+        const user = db.prepare('SELECT id, name, role, push_token, character, avatar FROM users WHERE id = ?')
+            .get(req.user.id) as { id: string; name: string; role: string; push_token: string | null; character: string; avatar: string | null };
 
         const result: Record<string, unknown> = { ...user };
 
@@ -45,12 +47,18 @@ export function registerMeRoutes(app: FastifyInstance, db: Db, auth: AuthHandler
         const body = PatchBody.safeParse(req.body);
         if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
 
-        const { name, push_token } = body.data;
+        const { name, push_token, character, avatar } = body.data;
         if (name !== undefined) {
             db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, req.user.id);
         }
         if (push_token !== undefined) {
             db.prepare('UPDATE users SET push_token = ? WHERE id = ?').run(push_token, req.user.id);
+        }
+        if (character !== undefined) {
+            db.prepare('UPDATE users SET character = ? WHERE id = ?').run(character, req.user.id);
+        }
+        if (avatar !== undefined) {
+            db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatar, req.user.id);
         }
         return { ok: true };
     });

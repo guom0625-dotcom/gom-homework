@@ -14,7 +14,7 @@ import { Palm } from '../../components/Palm';
 import { Button } from '../../components/Button';
 import { StatusBanner } from '../../components/StatusBanner';
 import { colors, fontFamilies, fontSizes, gradients, radius, shadows } from '../../theme';
-import type { CharacterType, DayStatus, IslandState } from '../../lib/types';
+import type { DayStatus, IslandState } from '../../lib/types';
 import type { GemColor } from '../../theme';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
 import { useAuthStore } from '../../store/authStore';
@@ -55,8 +55,8 @@ const ACTION_LABEL: Record<DayStatus, string> = {
 
 export function MainHorizontal() {
   const navigation = useNavigation<NativeStackNavigationProp<StudentStackParams>>();
-  const { user, logout } = useAuthStore();
-  const { currentDay, dayStatus, points, gems, fetchMe, completeDay } = useAppStore();
+  const { user } = useAuthStore();
+  const { currentDay, dayStatus, points, gems, character, avatar, fetchMe, completeDay } = useAppStore();
 
   // 화면 포커스 시 데이터 갱신 (다른 화면 갔다 돌아올 때)
   useFocusEffect(useCallback(() => {
@@ -71,7 +71,6 @@ export function MainHorizontal() {
     return () => sub.remove();
   }, []);
 
-  const character: CharacterType = 'bear';
   const islands = Array.from({ length: ISLAND_COUNT }, (_, i) => i + 1);
 
   const islandX = (i: number) => 50 + i * ISLAND_STEP;
@@ -108,6 +107,7 @@ export function MainHorizontal() {
           <TopHud
             name={user?.name ?? ''}
             character={character}
+            photoUrl={avatar ?? undefined}
             points={points}
             streak={currentDay}
           />
@@ -214,10 +214,7 @@ export function MainHorizontal() {
                 size="md"
                 label="⚙️"
                 style={styles.squareBtn}
-                onPress={() => Alert.alert('로그아웃', '정말 로그아웃할까요?', [
-                  { text: '취소', style: 'cancel' },
-                  { text: '로그아웃', style: 'destructive', onPress: logout },
-                ])}
+                onPress={() => navigation.navigate('Profile')}
               />
             </View>
           </View>

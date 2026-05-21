@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
 import { gemsToPoints, EMPTY_INVENTORY, type GemInventory, type GemKey } from '../lib/gems';
-import type { DayStatus } from '../lib/types';
+import type { CharacterType, DayStatus } from '../lib/types';
 
 export interface Task {
     id: string;
@@ -66,6 +66,8 @@ interface MeData {
     gems?: GemInventory;
     manager?: { id: string; name: string } | null;
     students?: { id: string; name: string }[];
+    character?: string;
+    avatar?: string | null;
 }
 
 function computeCurrentDay(progress: DayProgress[]): number {
@@ -94,6 +96,10 @@ interface AppState {
     points: number;
     gems: GemInventory;
     dayStatus: DayStatus;
+    character: CharacterType;
+    avatar: string | null;
+
+    updateProfile: (character: CharacterType, avatar?: string | null) => Promise<void>;
 
     // student — catalog & spend
     catalog: CatalogItem[];
@@ -130,6 +136,8 @@ const initialState = {
     points: 0,
     gems: { ...EMPTY_INVENTORY },
     dayStatus: 'todo' as DayStatus,
+    character: 'bear' as CharacterType,
+    avatar: null as string | null,
     catalog: [] as CatalogItem[],
     students: [],
     selectedStudentTasks: [],
@@ -141,7 +149,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     fetchMe: async () => {
         const me = await api<MeData>('/me');
         const gems = (me.gems ?? EMPTY_INVENTORY) as GemInventory;
-        set({ me, gems, points: gemsToPoints(gems) });
+        const character = (me.character as CharacterType | undefined) ?? 'bear';
+        const avatar = me.avatar ?? null;
+        set({ me, gems, points: gemsToPoints(gems), character, avatar });
 
         if (me.role === 'student') {
             const dayProgress = await api<DayProgress[]>('/progress').catch(() => []);
@@ -182,6 +192,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         const tasks = get().tasks.filter(t => t.id !== id);
         const { dayProgress, currentDay } = get();
         set({ tasks, dayStatus: computeDayStatus(tasks, dayProgress, currentDay) });
+    },
+
+    updateProfile: async (character, avatar) => {
+        const body: Record<string, unknown> = { character };
+        if (avatar !== undefined) body.avatar = avatar;
+        await api('/me', { method: 'PATCH', body: JSON.stringify(body) });
+        set({ character, ...(avatar !== undefined ? { avatar } : {}) });
     },
 
     completeDay: async (day) => {

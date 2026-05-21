@@ -16,6 +16,7 @@ import { ApprovalScreen } from '../screens/manager/Approval';
 import { CatalogScreen } from '../screens/manager/CatalogScreen';
 import { SpendApprovalScreen } from '../screens/manager/SpendApprovalScreen';
 import { SpendScreen } from '../screens/student/SpendScreen';
+import { ProfileScreen } from '../screens/student/ProfileScreen';
 import { colors } from '../theme';
 
 export type AuthStackParams = {
@@ -29,6 +30,7 @@ export type StudentStackParams = {
     TaskList: { day: number };
     TaskRegister: { day: number };
     Spend: undefined;
+    Profile: undefined;
 };
 
 export type ManagerStackParams = {
@@ -50,6 +52,7 @@ function StudentNavigator() {
             <StudentStack.Screen name="TaskList" component={TaskListScreen} />
             <StudentStack.Screen name="TaskRegister" component={TaskRegisterScreen} />
             <StudentStack.Screen name="Spend" component={SpendScreen} />
+            <StudentStack.Screen name="Profile" component={ProfileScreen} />
         </StudentStack.Navigator>
     );
 }
