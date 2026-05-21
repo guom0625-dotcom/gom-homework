@@ -186,13 +186,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     completeDay: async (day) => {
         await api(`/day/${day}/complete`, { method: 'POST' });
-        const dayProgress = get().dayProgress.map(d =>
-            d.day === day ? { ...d, status: 'complete' as const } : d
-        );
-        const currentDay = computeCurrentDay(dayProgress);
-        const tasks = await api<Task[]>(`/tasks?day=${currentDay}`);
-        const dayStatus = computeDayStatus(tasks, dayProgress, currentDay);
-        set({ dayProgress, currentDay, tasks, dayStatus });
+        await get().fetchMe();
     },
 
     fetchCatalog: async () => {

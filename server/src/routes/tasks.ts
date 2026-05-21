@@ -337,9 +337,9 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         const row = db.prepare(
             'SELECT status FROM day_progress WHERE student_id = ? AND day = ?'
         ).get(req.user.id, day) as { status: string } | undefined;
-        if (!row || row.status !== 'approved') {
-            return reply.code(409).send({ error: 'not_approved' });
-        }
+        if (!row) return reply.code(409).send({ error: 'not_approved' });
+        if (row.status === 'complete') return { ok: true };  // 이미 완료 — 멱등 처리
+        if (row.status !== 'approved') return reply.code(409).send({ error: 'not_approved' });
         db.prepare(
             "UPDATE day_progress SET status = 'complete', updated_at = ? WHERE student_id = ? AND day = ?"
         ).run(Date.now(), req.user.id, day);
