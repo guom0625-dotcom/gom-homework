@@ -35,14 +35,13 @@ function recalcDayStatus(db: Db, studentId: string, day: number): void {
 
     if (tasks.length === 0) return;
 
-    const PENDING_STATUSES = ['plan_submitted', 'plan_rejected', 'submitted', 'rejected'];
     let status: string;
     if (tasks.every((t) => t.status === 'approved')) {
         status = 'approved';
-    } else if (tasks.some((t) => PENDING_STATUSES.includes(t.status))) {
-        status = 'pending';
-    } else {
+    } else if (tasks.every((t) => t.status === 'todo')) {
         status = 'todo';
+    } else {
+        status = 'pending';
     }
 
     db.prepare(

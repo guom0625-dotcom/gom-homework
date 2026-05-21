@@ -1,5 +1,5 @@
-import React, { useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert, AppState } from 'react-native';
+import React, { useEffect, useCallback, useRef } from 'react';
+import { View, Text, ScrollView, StyleSheet, Alert, AppState, type AppStateStatus } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -64,9 +64,13 @@ export function MainHorizontal() {
   }, []));
 
   // 앱이 백그라운드에서 포그라운드로 올 때 갱신
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   useEffect(() => {
-    const sub = AppState.addEventListener('change', state => {
-      if (state === 'active') fetchMe().catch(() => {});
+    const sub = AppState.addEventListener('change', next => {
+      if (appStateRef.current.match(/inactive|background/) && next === 'active') {
+        fetchMe().catch(() => {});
+      }
+      appStateRef.current = next;
     });
     return () => sub.remove();
   }, []);

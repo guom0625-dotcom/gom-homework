@@ -83,9 +83,9 @@ function computeDayStatus(tasks: Task[], dayProgress: DayProgress[], day: number
     if (prog?.status === 'complete') return 'complete';
     if (prog?.status === 'approved') return 'approved';
     if (tasks.length === 0) return 'todo';
-    if (tasks.some(t => ['plan_submitted', 'plan_rejected', 'submitted', 'rejected'].includes(t.status))) return 'pending';
     if (tasks.every(t => t.status === 'approved')) return 'approved';
-    return 'todo';
+    if (tasks.every(t => t.status === 'todo')) return 'todo';
+    return 'pending';
 }
 
 interface AppState {
@@ -154,7 +154,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ me, gems, points: gemsToPoints(gems), character, avatar });
 
         if (me.role === 'student') {
-            const dayProgress = await api<DayProgress[]>('/progress').catch(() => []);
+            const dayProgress = await api<DayProgress[]>('/progress');
             const currentDay = computeCurrentDay(dayProgress);
             const tasks = await api<Task[]>(`/tasks?day=${currentDay}`);
             const dayStatus = computeDayStatus(tasks, dayProgress, currentDay);
