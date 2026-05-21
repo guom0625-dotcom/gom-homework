@@ -57,8 +57,12 @@ export function useUpdateCheck() {
 
         const timer = setTimeout(async () => {
             try {
+                const ghToken = process.env.EXPO_PUBLIC_GH_TOKEN;
                 const res = await fetch(API_URL, {
-                    headers: { 'Accept': 'application/vnd.github+json' },
+                    headers: {
+                        'Accept': 'application/vnd.github+json',
+                        ...(ghToken ? { 'Authorization': `Bearer ${ghToken}` } : {}),
+                    },
                 });
                 if (!res.ok) return;
 
