@@ -17,21 +17,27 @@ type Props = {
 };
 
 const STATUS_LABEL: Record<Task['status'], string> = {
-    todo: '할일',
-    submitted: '제출됨',
-    approved: '✅ 승인',
-    rejected: '❌ 반려',
+    todo:           '할일',
+    plan_submitted: '⏳ 계획 검토중',
+    plan_approved:  '✅ 계획 승인',
+    plan_rejected:  '❌ 계획 반려',
+    submitted:      '⏳ 완료 검토중',
+    approved:       '✅ 완료 승인',
+    rejected:       '❌ 완료 반려',
 };
 const STATUS_COLOR: Record<Task['status'], string> = {
-    todo: colors.ink[300],
-    submitted: colors.sun[500],
-    approved: colors.ocean[500],
-    rejected: colors.coral[500],
+    todo:           colors.ink[300],
+    plan_submitted: colors.sun[500],
+    plan_approved:  colors.ocean[300],
+    plan_rejected:  colors.coral[500],
+    submitted:      colors.sun[500],
+    approved:       colors.ocean[500],
+    rejected:       colors.coral[500],
 };
 
 export function TaskListScreen({ navigation, route }: Props) {
     const { day } = route.params;
-    const { tasks, fetchTasks, submitTask, deleteTask } = useAppStore();
+    const { tasks, fetchTasks, submitTask, deleteTask, submitPlan } = useAppStore();
     const [refreshing, setRefreshing] = useState(false);
     const [loadingId, setLoadingId] = useState<string | null>(null);
 
@@ -41,6 +47,17 @@ export function TaskListScreen({ navigation, route }: Props) {
         setRefreshing(true);
         await fetchTasks(day).catch(() => {});
         setRefreshing(false);
+    };
+
+    const handleSubmitPlan = async (id: string) => {
+        setLoadingId(id);
+        try {
+            await submitPlan(id);
+        } catch (e: unknown) {
+            Alert.alert('오류', e instanceof Error ? e.message : '상신 실패');
+        } finally {
+            setLoadingId(null);
+        }
     };
 
     const handleSubmit = async (id: string) => {
@@ -106,7 +123,25 @@ export function TaskListScreen({ navigation, route }: Props) {
                             <Text style={[styles.statusBadge, { color: STATUS_COLOR[item.status] }]}>
                                 {STATUS_LABEL[item.status]}
                             </Text>
-                            {item.status === 'todo' || item.status === 'rejected' ? (
+                            {(item.status === 'todo' || item.status === 'plan_rejected') && (
+                                <View style={styles.actionBtns}>
+                                    {loadingId === item.id
+                                        ? <ActivityIndicator size="small" color={colors.ocean[500]} />
+                                        : (
+                                            <TouchableOpacity
+                                                style={styles.submitBtn}
+                                                onPress={() => handleSubmitPlan(item.id)}
+                                            >
+                                                <Text style={styles.submitBtnText}>계획 상신</Text>
+                                            </TouchableOpacity>
+                                        )
+                                    }
+                                    <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                                        <Text style={styles.deleteBtn}>🗑</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                            {(item.status === 'plan_approved' || item.status === 'rejected') && (
                                 <View style={styles.actionBtns}>
                                     {loadingId === item.id
                                         ? <ActivityIndicator size="small" color={colors.ocean[500]} />
@@ -115,17 +150,14 @@ export function TaskListScreen({ navigation, route }: Props) {
                                                 style={styles.submitBtn}
                                                 onPress={() => handleSubmit(item.id)}
                                             >
-                                                <Text style={styles.submitBtnText}>제출</Text>
+                                                <Text style={styles.submitBtnText}>
+                                                    {item.status === 'rejected' ? '재제출' : '완료 상신'}
+                                                </Text>
                                             </TouchableOpacity>
                                         )
                                     }
-                                    {item.status === 'todo' && (
-                                        <TouchableOpacity onPress={() => handleDelete(item.id)}>
-                                            <Text style={styles.deleteBtn}>🗑</Text>
-                                        </TouchableOpacity>
-                                    )}
                                 </View>
-                            ) : null}
+                            )}
                         </View>
                     </View>
                 )}

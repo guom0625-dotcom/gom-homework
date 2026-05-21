@@ -9,7 +9,7 @@ export interface Task {
     day: number;
     title: string;
     memo: string | null;
-    status: 'todo' | 'submitted' | 'approved' | 'rejected';
+    status: 'todo' | 'plan_submitted' | 'plan_approved' | 'plan_rejected' | 'submitted' | 'approved' | 'rejected';
     gem_type: GemKey | null;
     gem_amount: number | null;
     submitted_at: number | null;
@@ -81,7 +81,7 @@ function computeDayStatus(tasks: Task[], dayProgress: DayProgress[], day: number
     if (prog?.status === 'complete') return 'complete';
     if (prog?.status === 'approved') return 'approved';
     if (tasks.length === 0) return 'todo';
-    if (tasks.some(t => t.status === 'submitted' || t.status === 'rejected')) return 'pending';
+    if (tasks.some(t => ['plan_submitted', 'plan_rejected', 'submitted', 'rejected'].includes(t.status))) return 'pending';
     if (tasks.every(t => t.status === 'approved')) return 'approved';
     return 'todo';
 }
@@ -115,6 +115,9 @@ interface AppState {
     fetchStudentTasks: (studentId: string, day?: number) => Promise<void>;
     approveTask: (id: string, gemType: GemKey, gemAmount: number) => Promise<void>;
     rejectTask: (id: string) => Promise<void>;
+    submitPlan: (id: string) => Promise<void>;
+    approvePlan: (id: string) => Promise<void>;
+    rejectPlan: (id: string) => Promise<void>;
 
     reset: () => void;
 }
@@ -240,6 +243,33 @@ export const useAppStore = create<AppState>((set, get) => ({
         set(s => ({
             selectedStudentTasks: s.selectedStudentTasks.map(t =>
                 t.id === id ? { ...t, status: 'rejected' as const } : t
+            ),
+        }));
+    },
+
+    submitPlan: async (id) => {
+        await api(`/tasks/${id}/submit-plan`, { method: 'POST' });
+        const tasks = get().tasks.map(t =>
+            t.id === id ? { ...t, status: 'plan_submitted' as const } : t
+        );
+        const { dayProgress, currentDay } = get();
+        set({ tasks, dayStatus: computeDayStatus(tasks, dayProgress, currentDay) });
+    },
+
+    approvePlan: async (id) => {
+        await api(`/tasks/${id}/approve-plan`, { method: 'POST' });
+        set(s => ({
+            selectedStudentTasks: s.selectedStudentTasks.map(t =>
+                t.id === id ? { ...t, status: 'plan_approved' as const } : t
+            ),
+        }));
+    },
+
+    rejectPlan: async (id) => {
+        await api(`/tasks/${id}/reject-plan`, { method: 'POST', body: JSON.stringify({}) });
+        set(s => ({
+            selectedStudentTasks: s.selectedStudentTasks.map(t =>
+                t.id === id ? { ...t, status: 'plan_rejected' as const } : t
             ),
         }));
     },

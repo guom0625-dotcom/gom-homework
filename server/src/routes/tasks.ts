@@ -35,10 +35,11 @@ function recalcDayStatus(db: Db, studentId: string, day: number): void {
 
     if (tasks.length === 0) return;
 
+    const PENDING_STATUSES = ['plan_submitted', 'plan_rejected', 'submitted', 'rejected'];
     let status: string;
     if (tasks.every((t) => t.status === 'approved')) {
         status = 'approved';
-    } else if (tasks.some((t) => t.status === 'submitted' || t.status === 'rejected')) {
+    } else if (tasks.some((t) => PENDING_STATUSES.includes(t.status))) {
         status = 'pending';
     } else {
         status = 'todo';
@@ -107,7 +108,107 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         return reply.code(201).send(db.prepare('SELECT * FROM tasks WHERE id = ?').get(id));
     });
 
-    // POST /tasks/:id/submit  (student only)
+    // POST /tasks/:id/submit-plan  (student only — todo/plan_rejected → plan_submitted)
+    app.post('/tasks/:id/submit-plan', { preHandler: auth }, async (req, reply) => {
+        if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
+        const { id } = req.params as { id: string };
+
+        const task = db.prepare(
+            'SELECT * FROM tasks WHERE id = ? AND student_id = ?'
+        ).get(id, req.user.id) as { status: string; day: number; title: string } | undefined;
+
+        if (!task) return reply.code(404).send({ error: 'not_found' });
+        if (task.status !== 'todo' && task.status !== 'plan_rejected') {
+            return reply.code(409).send({ error: 'cannot_submit_plan' });
+        }
+
+        const now = Date.now();
+        db.prepare(
+            "UPDATE tasks SET status = 'plan_submitted' WHERE id = ?"
+        ).run(id);
+        recalcDayStatus(db, req.user.id, task.day);
+
+        const manager = db.prepare(`
+            SELECT u.push_token FROM manager_student_link l
+            JOIN users u ON u.id = l.manager_id
+            WHERE l.student_id = ?
+        `).get(req.user.id) as { push_token: string | null } | undefined;
+
+        const student = db.prepare('SELECT name FROM users WHERE id = ?').get(req.user.id) as { name: string };
+        await sendPush(manager?.push_token, {
+            title: `${student.name}의 계획 상신`,
+            body: task.title,
+            data: { type: 'plan_submitted', task_id: id },
+        });
+
+        return { ok: true };
+    });
+
+    // POST /tasks/:id/approve-plan  (manager only)
+    app.post('/tasks/:id/approve-plan', { preHandler: auth }, async (req, reply) => {
+        if (req.user.role !== 'manager') return reply.code(403).send({ error: 'forbidden' });
+        const { id } = req.params as { id: string };
+
+        const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as
+            { student_id: string; status: string; day: number; title: string } | undefined;
+        if (!task) return reply.code(404).send({ error: 'not_found' });
+        if (task.status !== 'plan_submitted') return reply.code(409).send({ error: 'not_plan_submitted' });
+
+        const link = db.prepare(
+            'SELECT 1 FROM manager_student_link WHERE manager_id = ? AND student_id = ?'
+        ).get(req.user.id, task.student_id);
+        if (!link) return reply.code(403).send({ error: 'forbidden' });
+
+        db.prepare(
+            "UPDATE tasks SET status = 'plan_approved', reviewed_at = ? WHERE id = ?"
+        ).run(Date.now(), id);
+        recalcDayStatus(db, task.student_id, task.day);
+
+        const student = db.prepare('SELECT push_token FROM users WHERE id = ?').get(task.student_id) as
+            { push_token: string | null };
+        await sendPush(student.push_token, {
+            title: '계획 승인!',
+            body: `"${task.title}" 이제 실행해봐요`,
+            data: { type: 'plan_approved', task_id: id },
+        });
+
+        return { ok: true };
+    });
+
+    // POST /tasks/:id/reject-plan  (manager only)
+    app.post('/tasks/:id/reject-plan', { preHandler: auth }, async (req, reply) => {
+        if (req.user.role !== 'manager') return reply.code(403).send({ error: 'forbidden' });
+        const { id } = req.params as { id: string };
+        const body = RejectBody.safeParse(req.body);
+        if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
+
+        const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as
+            { student_id: string; status: string; day: number; title: string } | undefined;
+        if (!task) return reply.code(404).send({ error: 'not_found' });
+        if (task.status !== 'plan_submitted') return reply.code(409).send({ error: 'not_plan_submitted' });
+
+        const link = db.prepare(
+            'SELECT 1 FROM manager_student_link WHERE manager_id = ? AND student_id = ?'
+        ).get(req.user.id, task.student_id);
+        if (!link) return reply.code(403).send({ error: 'forbidden' });
+
+        db.prepare(
+            "UPDATE tasks SET status = 'plan_rejected', reviewed_at = ? WHERE id = ?"
+        ).run(Date.now(), id);
+        recalcDayStatus(db, task.student_id, task.day);
+
+        const student = db.prepare('SELECT push_token FROM users WHERE id = ?').get(task.student_id) as
+            { push_token: string | null };
+        await sendPush(student.push_token, {
+            title: '계획 수정이 필요해요',
+            body: `"${task.title}" — ${body.data.reason ?? '계획을 수정하고 다시 상신해주세요'}`,
+            data: { type: 'plan_rejected', task_id: id },
+        });
+
+        return { ok: true };
+    });
+
+    // POST /tasks/:id/submit  (student only — plan_approved/rejected → submitted)
     app.post('/tasks/:id/submit', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
         const { id } = req.params as { id: string };
@@ -117,7 +218,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         ).get(id, req.user.id) as { status: string; day: number; title: string } | undefined;
 
         if (!task) return reply.code(404).send({ error: 'not_found' });
-        if (task.status !== 'todo' && task.status !== 'rejected') {
+        if (task.status !== 'plan_approved' && task.status !== 'rejected') {
             return reply.code(409).send({ error: 'cannot_submit' });
         }
 
@@ -255,7 +356,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         ).get(id, req.user.id) as { day: number; status: string } | undefined;
 
         if (!task) return reply.code(404).send({ error: 'not_found' });
-        if (task.status !== 'todo') return reply.code(409).send({ error: 'cannot_delete' });
+        if (task.status !== 'todo' && task.status !== 'plan_rejected') return reply.code(409).send({ error: 'cannot_delete' });
 
         db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
         recalcDayStatus(db, req.user.id, task.day);

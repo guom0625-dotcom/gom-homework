@@ -27,13 +27,13 @@ const GEM_OPTIONS: { key: GemKey; amount: number; label: string }[] = [
 
 export function ApprovalScreen({ navigation, route }: Props) {
     const { studentId, studentName } = route.params;
-    const { selectedStudentTasks, fetchStudentTasks, approveTask, rejectTask } = useAppStore();
+    const { selectedStudentTasks, fetchStudentTasks, approveTask, rejectTask, approvePlan, rejectPlan } = useAppStore();
     const [refreshing, setRefreshing] = useState(false);
     const [approveTarget, setApproveTarget] = useState<string | null>(null);
     const [loadingId, setLoadingId] = useState<string | null>(null);
 
-    const submittedTasks = selectedStudentTasks.filter(t => t.status === 'submitted');
-    const otherTasks = selectedStudentTasks.filter(t => t.status !== 'submitted');
+    const pendingTasks = selectedStudentTasks.filter(t => t.status === 'plan_submitted' || t.status === 'submitted');
+    const otherTasks = selectedStudentTasks.filter(t => t.status !== 'plan_submitted' && t.status !== 'submitted');
 
     useEffect(() => {
         fetchStudentTasks(studentId);
@@ -45,7 +45,7 @@ export function ApprovalScreen({ navigation, route }: Props) {
         setRefreshing(false);
     };
 
-    const handleApprove = async (gemKey: GemKey, gemAmount: number) => {
+    const handleApproveCompletion = async (gemKey: GemKey, gemAmount: number) => {
         if (!approveTarget) return;
         setLoadingId(approveTarget);
         setApproveTarget(null);
@@ -58,8 +58,8 @@ export function ApprovalScreen({ navigation, route }: Props) {
         }
     };
 
-    const handleReject = (id: string) => {
-        Alert.alert('반려', '이 할일을 반려할까요?', [
+    const handleRejectCompletion = (id: string) => {
+        Alert.alert('완료 반려', '완료를 반려할까요?', [
             { text: '취소', style: 'cancel' },
             {
                 text: '반려', style: 'destructive',
@@ -73,7 +73,33 @@ export function ApprovalScreen({ navigation, route }: Props) {
         ]);
     };
 
-    const allTasks = [...submittedTasks, ...otherTasks];
+    const handleApprovePlan = async (id: string) => {
+        setLoadingId(id);
+        try {
+            await approvePlan(id);
+        } catch (e: unknown) {
+            Alert.alert('오류', e instanceof Error ? e.message : '승인 실패');
+        } finally {
+            setLoadingId(null);
+        }
+    };
+
+    const handleRejectPlan = (id: string) => {
+        Alert.alert('계획 반려', '이 계획을 반려할까요?', [
+            { text: '취소', style: 'cancel' },
+            {
+                text: '반려', style: 'destructive',
+                onPress: async () => {
+                    setLoadingId(id);
+                    try { await rejectPlan(id); }
+                    catch (e: unknown) { Alert.alert('오류', e instanceof Error ? e.message : '반려 실패'); }
+                    finally { setLoadingId(null); }
+                },
+            },
+        ]);
+    };
+
+    const allTasks = [...pendingTasks, ...otherTasks];
 
     return (
         <SafeAreaView style={styles.safe} edges={['top']}>
@@ -85,10 +111,10 @@ export function ApprovalScreen({ navigation, route }: Props) {
                 <View style={{ width: 36 }} />
             </View>
 
-            {submittedTasks.length > 0 && (
+            {pendingTasks.length > 0 && (
                 <View style={styles.pendingBanner}>
                     <Text style={styles.pendingText}>
-                        📋 검토 대기 {submittedTasks.length}개
+                        📋 검토 대기 {pendingTasks.length}개
                     </Text>
                 </View>
             )}
@@ -107,8 +133,10 @@ export function ApprovalScreen({ navigation, route }: Props) {
                     <TaskCard
                         task={item}
                         isLoading={loadingId === item.id}
-                        onApprove={() => setApproveTarget(item.id)}
-                        onReject={() => handleReject(item.id)}
+                        onApprovePlan={() => handleApprovePlan(item.id)}
+                        onRejectPlan={() => handleRejectPlan(item.id)}
+                        onApproveCompletion={() => setApproveTarget(item.id)}
+                        onRejectCompletion={() => handleRejectCompletion(item.id)}
                     />
                 )}
             />
@@ -127,7 +155,7 @@ export function ApprovalScreen({ navigation, route }: Props) {
                             <TouchableOpacity
                                 key={i}
                                 style={styles.gemOption}
-                                onPress={() => handleApprove(opt.key, opt.amount)}
+                                onPress={() => handleApproveCompletion(opt.key, opt.amount)}
                             >
                                 <Text style={styles.gemOptionText}>{opt.label}</Text>
                             </TouchableOpacity>
@@ -145,15 +173,29 @@ export function ApprovalScreen({ navigation, route }: Props) {
     );
 }
 
-function TaskCard({ task, isLoading, onApprove, onReject }: {
+const STATUS_ICON: Partial<Record<Task['status'], string>> = {
+    approved:      '✅',
+    rejected:      '❌',
+    plan_approved: '📋✅',
+    plan_rejected: '📋❌',
+    plan_submitted:'📋⏳',
+    todo:          '—',
+};
+
+function TaskCard({ task, isLoading, onApprovePlan, onRejectPlan, onApproveCompletion, onRejectCompletion }: {
     task: Task;
     isLoading: boolean;
-    onApprove: () => void;
-    onReject: () => void;
+    onApprovePlan: () => void;
+    onRejectPlan: () => void;
+    onApproveCompletion: () => void;
+    onRejectCompletion: () => void;
 }) {
-    const isSubmitted = task.status === 'submitted';
+    const isPlanPending = task.status === 'plan_submitted';
+    const isCompletionPending = task.status === 'submitted';
+    const isPending = isPlanPending || isCompletionPending;
+
     return (
-        <View style={[styles.taskCard, isSubmitted && styles.taskCardPending]}>
+        <View style={[styles.taskCard, isPending && styles.taskCardPending]}>
             <View style={styles.taskInfo}>
                 <View style={styles.taskDayBadge}>
                     <Text style={styles.taskDayText}>Day {task.day}</Text>
@@ -166,27 +208,42 @@ function TaskCard({ task, isLoading, onApprove, onReject }: {
                     </Text>
                 ) : null}
             </View>
-            {isSubmitted && (
+            {isPending && (
                 isLoading
                     ? <ActivityIndicator color={colors.ocean[500]} />
                     : (
                         <View style={styles.taskActions}>
-                            <TouchableOpacity style={styles.approveBtn} onPress={onApprove}>
-                                <Text style={styles.approveBtnText}>✅ 승인</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.rejectBtn} onPress={onReject}>
-                                <Text style={styles.rejectBtnText}>❌ 반려</Text>
-                            </TouchableOpacity>
+                            {isPlanPending ? (
+                                <>
+                                    <TouchableOpacity style={styles.approveBtn} onPress={onApprovePlan}>
+                                        <Text style={styles.approveBtnText}>📋 계획 승인</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.rejectBtn} onPress={onRejectPlan}>
+                                        <Text style={styles.rejectBtnText}>❌ 반려</Text>
+                                    </TouchableOpacity>
+                                </>
+                            ) : (
+                                <>
+                                    <TouchableOpacity style={styles.approveBtn} onPress={onApproveCompletion}>
+                                        <Text style={styles.approveBtnText}>✅ 완료 승인</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.rejectBtn} onPress={onRejectCompletion}>
+                                        <Text style={styles.rejectBtnText}>❌ 반려</Text>
+                                    </TouchableOpacity>
+                                </>
+                            )}
                         </View>
                     )
             )}
-            {!isSubmitted && (
+            {!isPending && (
                 <Text style={[styles.statusText, {
                     color: task.status === 'approved' ? colors.ocean[500]
                         : task.status === 'rejected' ? colors.coral[500]
+                        : task.status === 'plan_approved' ? colors.ocean[300]
+                        : task.status === 'plan_rejected' ? colors.coral[500]
                         : colors.ink[300]
                 }]}>
-                    {task.status === 'approved' ? '✅' : task.status === 'rejected' ? '❌' : '—'}
+                    {STATUS_ICON[task.status] ?? '—'}
                 </Text>
             )}
         </View>
