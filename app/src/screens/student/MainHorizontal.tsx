@@ -95,7 +95,12 @@ export function MainHorizontal() {
       try {
         await completeDay(currentDay);
       } catch (e: unknown) {
-        Alert.alert('오류', e instanceof Error ? e.message : '오류가 발생했어요');
+        const msg = e instanceof Error ? e.message : '오류가 발생했어요';
+        if (msg === 'too_early') {
+          Alert.alert('아직 이른 시간이에요', '다음 날이 되면 다음 섬으로 넘어갈 수 있어요 🌙');
+        } else {
+          Alert.alert('오류', msg);
+        }
       }
     }
   };

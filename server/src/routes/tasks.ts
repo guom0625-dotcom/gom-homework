@@ -22,10 +22,15 @@ const RejectBody = z.object({
 });
 
 function getOrCreateDayProgress(db: Db, studentId: string, day: number): void {
+    const now = Date.now();
     db.prepare(`
-        INSERT OR IGNORE INTO day_progress (student_id, day, status, updated_at)
-        VALUES (?, ?, 'todo', ?)
-    `).run(studentId, day, Date.now());
+        INSERT OR IGNORE INTO day_progress (student_id, day, status, updated_at, started_at)
+        VALUES (?, ?, 'todo', ?, ?)
+    `).run(studentId, day, now, now);
+}
+
+function toKSTDateString(ts: number): string {
+    return new Date(ts + 9 * 3_600_000).toISOString().slice(0, 10);
 }
 
 function recalcDayStatus(db: Db, studentId: string, day: number): void {
@@ -347,11 +352,14 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
         const day = Number((req.params as { day: string }).day);
         const row = db.prepare(
-            'SELECT status FROM day_progress WHERE student_id = ? AND day = ?'
-        ).get(req.user.id, day) as { status: string } | undefined;
+            'SELECT status, started_at FROM day_progress WHERE student_id = ? AND day = ?'
+        ).get(req.user.id, day) as { status: string; started_at: number | null } | undefined;
         if (!row) return reply.code(409).send({ error: 'not_approved' });
         if (row.status === 'complete') return { ok: true };  // 이미 완료 — 멱등 처리
         if (row.status !== 'approved') return reply.code(409).send({ error: 'not_approved' });
+        const startedDate = toKSTDateString(row.started_at ?? Date.now());
+        const todayDate = toKSTDateString(Date.now());
+        if (startedDate >= todayDate) return reply.code(409).send({ error: 'too_early' });
         db.prepare(
             "UPDATE day_progress SET status = 'complete', updated_at = ? WHERE student_id = ? AND day = ?"
         ).run(Date.now(), req.user.id, day);
