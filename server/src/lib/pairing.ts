@@ -1,9 +1,10 @@
+import { randomInt } from 'node:crypto';
 import type { Db } from '../db.ts';
 
 const CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export function generateCode(db: Db, managerId: string): string {
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code = String(randomInt(100000, 1_000_000));
     const now = Date.now();
     // clean up expired codes for this manager
     db.prepare('DELETE FROM pairing_codes WHERE manager_id = ? OR expires_at < ?').run(managerId, now);

@@ -212,14 +212,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     },
 
     requestSpend: async (catalogId) => {
+        // 요청 시점에는 보석이 차감되지 않음 (매니저 승인 시 차감) — 잔고 재호출 불필요
         await api('/spend-requests', {
             method: 'POST',
             body: JSON.stringify({ catalog_id: catalogId }),
         });
-        // 보석 잔고 갱신
-        const me = await api<{ gems: GemInventory }>('/me');
-        const gems = me.gems ?? EMPTY_INVENTORY;
-        set({ gems, points: gemsToPoints(gems) });
     },
 
     fetchStudents: async () => {

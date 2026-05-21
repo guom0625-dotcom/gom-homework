@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     View, Text, FlatList, StyleSheet, TouchableOpacity,
     ActivityIndicator, Alert, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
@@ -42,6 +43,10 @@ export function TaskListScreen({ navigation, route }: Props) {
     const [loadingId, setLoadingId] = useState<string | null>(null);
 
     useEffect(() => { fetchTasks(day); }, [day]);
+
+    useFocusEffect(useCallback(() => {
+        fetchTasks(day).catch(() => {});
+    }, [day]));
 
     const refresh = async () => {
         setRefreshing(true);

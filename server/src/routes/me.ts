@@ -6,9 +6,10 @@ import { GEM_TYPES } from '../lib/gems.ts';
 
 const PatchBody = z.object({
     name: z.string().min(1).max(30).optional(),
-    push_token: z.string().nullable().optional(),
+    push_token: z.string().max(200).nullable().optional(),
     character: z.enum(['bear', 'fox', 'cat', 'owl']).optional(),
-    avatar: z.string().nullable().optional(),
+    // base64 data URL — ~500KB cap (300x300 JPEG q0.7 압축 시 ~30~60KB 가정, 여유분 포함)
+    avatar: z.string().max(700_000).nullable().optional(),
 });
 
 export function registerMeRoutes(app: FastifyInstance, db: Db, auth: AuthHandler): void {

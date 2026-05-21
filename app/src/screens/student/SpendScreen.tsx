@@ -4,6 +4,7 @@ import {
     ActivityIndicator, Alert, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
 import { useAppStore, type CatalogItem } from '../../store/appStore';
@@ -27,7 +28,7 @@ function itemCost(item: CatalogItem): Partial<GemInventory> {
 function GemBalanceBar({ gems }: { gems: GemInventory }) {
     return (
         <View style={styles.balanceBar}>
-            {GEM_KEYS.filter(g => gems[g] > 0 || true).map(g => (
+            {GEM_KEYS.map(g => (
                 <View key={g} style={styles.balanceChip}>
                     <Gem size={16} color={g} />
                     <Text style={styles.balanceNum}>{gems[g]}</Text>
@@ -55,15 +56,23 @@ function CostChips({ item }: { item: CatalogItem }) {
 }
 
 export function SpendScreen({ navigation }: Props) {
-    const { gems, catalog, fetchCatalog, requestSpend } = useAppStore();
+    const { gems, catalog, fetchCatalog, fetchMe, requestSpend } = useAppStore();
     const [refreshing, setRefreshing] = useState(false);
     const [loadingId, setLoadingId] = useState<string | null>(null);
 
     useEffect(() => { fetchCatalog().catch(() => {}); }, []);
 
+    useFocusEffect(useCallback(() => {
+        fetchMe().catch(() => {});
+        fetchCatalog().catch(() => {});
+    }, []));
+
     const refresh = useCallback(async () => {
         setRefreshing(true);
-        await fetchCatalog().catch(() => {});
+        await Promise.all([
+            fetchMe().catch(() => {}),
+            fetchCatalog().catch(() => {}),
+        ]);
         setRefreshing(false);
     }, []);
 

@@ -4,6 +4,7 @@ import {
     ActivityIndicator, Alert, RefreshControl, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { useAuthStore } from '../../store/authStore';
@@ -27,6 +28,10 @@ export function DashboardScreen({ navigation }: Props) {
     useEffect(() => {
         fetchStudents().finally(() => setLoading(false));
     }, []);
+
+    useFocusEffect(useCallback(() => {
+        fetchStudents().catch(() => {});
+    }, []));
 
     const refresh = useCallback(async () => {
         setRefreshing(true);

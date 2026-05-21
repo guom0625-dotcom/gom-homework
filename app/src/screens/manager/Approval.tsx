@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     View, Text, FlatList, StyleSheet, TouchableOpacity,
     ActivityIndicator, Alert, Modal, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
@@ -38,6 +39,10 @@ export function ApprovalScreen({ navigation, route }: Props) {
     useEffect(() => {
         fetchStudentTasks(studentId);
     }, [studentId]);
+
+    useFocusEffect(useCallback(() => {
+        fetchStudentTasks(studentId).catch(() => {});
+    }, [studentId]));
 
     const refresh = async () => {
         setRefreshing(true);

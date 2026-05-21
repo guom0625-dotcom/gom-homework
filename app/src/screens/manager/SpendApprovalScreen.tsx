@@ -4,6 +4,7 @@ import {
     ActivityIndicator, Alert, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { api } from '../../api/client';
@@ -43,6 +44,10 @@ export function SpendApprovalScreen({ navigation }: Props) {
     useEffect(() => {
         load().finally(() => setLoading(false));
     }, []);
+
+    useFocusEffect(useCallback(() => {
+        load().catch(() => {});
+    }, [load]));
 
     const refresh = useCallback(async () => {
         setRefreshing(true);

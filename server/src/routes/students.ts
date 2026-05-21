@@ -9,7 +9,7 @@ export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHa
         if (req.user.role !== 'manager') return reply.code(403).send({ error: 'forbidden' });
 
         const students = db.prepare(`
-            SELECT u.id, u.name, u.push_token,
+            SELECT u.id, u.name,
                    gb.topaz, gb.emerald, gb.sapphire, gb.ruby, gb.amethyst,
                    gb.updated_at AS gems_updated_at
             FROM manager_student_link l

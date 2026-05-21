@@ -121,11 +121,12 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             return reply.code(409).send({ error: 'cannot_submit_plan' });
         }
 
-        const now = Date.now();
-        db.prepare(
-            "UPDATE tasks SET status = 'plan_submitted' WHERE id = ?"
-        ).run(id);
-        recalcDayStatus(db, req.user.id, task.day);
+        db.transaction(() => {
+            db.prepare(
+                "UPDATE tasks SET status = 'plan_submitted' WHERE id = ?"
+            ).run(id);
+            recalcDayStatus(db, req.user.id, task.day);
+        })();
 
         const manager = db.prepare(`
             SELECT u.push_token FROM manager_student_link l
@@ -151,17 +152,20 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as
             { student_id: string; status: string; day: number; title: string } | undefined;
         if (!task) return reply.code(404).send({ error: 'not_found' });
-        if (task.status !== 'plan_submitted') return reply.code(409).send({ error: 'not_plan_submitted' });
 
         const link = db.prepare(
             'SELECT 1 FROM manager_student_link WHERE manager_id = ? AND student_id = ?'
         ).get(req.user.id, task.student_id);
         if (!link) return reply.code(403).send({ error: 'forbidden' });
 
-        db.prepare(
-            "UPDATE tasks SET status = 'plan_approved', reviewed_at = ? WHERE id = ?"
-        ).run(Date.now(), id);
-        recalcDayStatus(db, task.student_id, task.day);
+        if (task.status !== 'plan_submitted') return reply.code(409).send({ error: 'not_plan_submitted' });
+
+        db.transaction(() => {
+            db.prepare(
+                "UPDATE tasks SET status = 'plan_approved', reviewed_at = ? WHERE id = ?"
+            ).run(Date.now(), id);
+            recalcDayStatus(db, task.student_id, task.day);
+        })();
 
         const student = db.prepare('SELECT push_token FROM users WHERE id = ?').get(task.student_id) as
             { push_token: string | null };
@@ -184,17 +188,20 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as
             { student_id: string; status: string; day: number; title: string } | undefined;
         if (!task) return reply.code(404).send({ error: 'not_found' });
-        if (task.status !== 'plan_submitted') return reply.code(409).send({ error: 'not_plan_submitted' });
 
         const link = db.prepare(
             'SELECT 1 FROM manager_student_link WHERE manager_id = ? AND student_id = ?'
         ).get(req.user.id, task.student_id);
         if (!link) return reply.code(403).send({ error: 'forbidden' });
 
-        db.prepare(
-            "UPDATE tasks SET status = 'plan_rejected', reviewed_at = ? WHERE id = ?"
-        ).run(Date.now(), id);
-        recalcDayStatus(db, task.student_id, task.day);
+        if (task.status !== 'plan_submitted') return reply.code(409).send({ error: 'not_plan_submitted' });
+
+        db.transaction(() => {
+            db.prepare(
+                "UPDATE tasks SET status = 'plan_rejected', reviewed_at = ? WHERE id = ?"
+            ).run(Date.now(), id);
+            recalcDayStatus(db, task.student_id, task.day);
+        })();
 
         const student = db.prepare('SELECT push_token FROM users WHERE id = ?').get(task.student_id) as
             { push_token: string | null };
@@ -222,10 +229,12 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         }
 
         const now = Date.now();
-        db.prepare(
-            'UPDATE tasks SET status = \'submitted\', submitted_at = ? WHERE id = ?'
-        ).run(now, id);
-        recalcDayStatus(db, req.user.id, task.day);
+        db.transaction(() => {
+            db.prepare(
+                'UPDATE tasks SET status = \'submitted\', submitted_at = ? WHERE id = ?'
+            ).run(now, id);
+            recalcDayStatus(db, req.user.id, task.day);
+        })();
 
         const manager = db.prepare(`
             SELECT u.push_token FROM manager_student_link l
@@ -253,12 +262,13 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as
             { student_id: string; status: string; day: number; title: string } | undefined;
         if (!task) return reply.code(404).send({ error: 'not_found' });
-        if (task.status !== 'submitted') return reply.code(409).send({ error: 'not_submitted' });
 
         const link = db.prepare(
             'SELECT 1 FROM manager_student_link WHERE manager_id = ? AND student_id = ?'
         ).get(req.user.id, task.student_id);
         if (!link) return reply.code(403).send({ error: 'forbidden' });
+
+        if (task.status !== 'submitted') return reply.code(409).send({ error: 'not_submitted' });
 
         const { gem_type, gem_amount } = body.data;
         const now = Date.now();
@@ -305,18 +315,21 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as
             { student_id: string; status: string; day: number; title: string } | undefined;
         if (!task) return reply.code(404).send({ error: 'not_found' });
-        if (task.status !== 'submitted') return reply.code(409).send({ error: 'not_submitted' });
 
         const link = db.prepare(
             'SELECT 1 FROM manager_student_link WHERE manager_id = ? AND student_id = ?'
         ).get(req.user.id, task.student_id);
         if (!link) return reply.code(403).send({ error: 'forbidden' });
 
+        if (task.status !== 'submitted') return reply.code(409).send({ error: 'not_submitted' });
+
         const now = Date.now();
-        db.prepare(
-            'UPDATE tasks SET status = \'rejected\', reviewed_at = ? WHERE id = ?'
-        ).run(now, id);
-        recalcDayStatus(db, task.student_id, task.day);
+        db.transaction(() => {
+            db.prepare(
+                'UPDATE tasks SET status = \'rejected\', reviewed_at = ? WHERE id = ?'
+            ).run(now, id);
+            recalcDayStatus(db, task.student_id, task.day);
+        })();
 
         const student = db.prepare('SELECT push_token FROM users WHERE id = ?').get(task.student_id) as
             { push_token: string | null };
@@ -357,8 +370,10 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         if (!task) return reply.code(404).send({ error: 'not_found' });
         if (task.status !== 'todo' && task.status !== 'plan_rejected') return reply.code(409).send({ error: 'cannot_delete' });
 
-        db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
-        recalcDayStatus(db, req.user.id, task.day);
+        db.transaction(() => {
+            db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
+            recalcDayStatus(db, req.user.id, task.day);
+        })();
         return { ok: true };
     });
 }
