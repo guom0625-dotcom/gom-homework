@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
     View, Text, FlatList, StyleSheet, TouchableOpacity,
-    ActivityIndicator, Alert, RefreshControl,
+    ActivityIndicator, Alert, RefreshControl, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -21,6 +21,8 @@ export function DashboardScreen({ navigation }: Props) {
     const [refreshing, setRefreshing] = useState(false);
     const [pairingCode, setPairingCode] = useState<string | null>(null);
     const [codeLoading, setCodeLoading] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingName, setEditingName] = useState('');
 
     useEffect(() => {
         fetchStudents().finally(() => setLoading(false));
@@ -53,6 +55,21 @@ export function DashboardScreen({ navigation }: Props) {
 
     const points = (s: StudentSummary) =>
         gemsToPoints({ topaz: s.topaz, emerald: s.emerald, sapphire: s.sapphire, ruby: s.ruby, amethyst: s.amethyst });
+
+    const handleRename = async (id: string) => {
+        const name = editingName.trim();
+        if (!name) { Alert.alert('이름을 입력해주세요'); return; }
+        try {
+            await api(`/students/${id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ name }),
+            });
+            await fetchStudents();
+            setEditingId(null);
+        } catch {
+            Alert.alert('오류', '이름 변경에 실패했어요');
+        }
+    };
 
     if (loading) {
         return (
@@ -115,24 +132,54 @@ export function DashboardScreen({ navigation }: Props) {
                     </View>
                 }
                 renderItem={({ item }) => (
-                    <TouchableOpacity
-                        style={styles.studentCard}
-                        onPress={() => navigation.navigate('Approval', {
-                            studentId: item.id,
-                            studentName: item.name,
-                        })}
-                    >
-                        <View style={styles.studentAvatar}>
+                    <View style={styles.studentCard}>
+                        <TouchableOpacity
+                            style={styles.studentAvatar}
+                            onPress={() => {
+                                setEditingId(item.id);
+                                setEditingName(item.name);
+                            }}
+                        >
                             <Text style={styles.avatarText}>{item.name[0]}</Text>
-                        </View>
+                        </TouchableOpacity>
                         <View style={styles.studentInfo}>
-                            <Text style={styles.studentName}>{item.name}</Text>
-                            <Text style={styles.studentPoints}>
-                                💎 {points(item).toLocaleString()} pt
-                            </Text>
+                            {editingId === item.id ? (
+                                <View style={styles.editRow}>
+                                    <TextInput
+                                        style={styles.nameInput}
+                                        value={editingName}
+                                        onChangeText={setEditingName}
+                                        autoFocus
+                                        maxLength={20}
+                                        onSubmitEditing={() => handleRename(item.id)}
+                                    />
+                                    <TouchableOpacity onPress={() => handleRename(item.id)} style={styles.saveBtn}>
+                                        <Text style={styles.saveBtnText}>저장</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity onPress={() => setEditingId(null)} style={styles.cancelBtn}>
+                                        <Text style={styles.cancelBtnText}>취소</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                <>
+                                    <Text style={styles.studentName}>{item.name}</Text>
+                                    <Text style={styles.studentPoints}>
+                                        💎 {points(item).toLocaleString()} pt
+                                    </Text>
+                                </>
+                            )}
                         </View>
-                        <Text style={styles.chevron}>›</Text>
-                    </TouchableOpacity>
+                        {editingId !== item.id && (
+                            <TouchableOpacity
+                                onPress={() => navigation.navigate('Approval', {
+                                    studentId: item.id,
+                                    studentName: item.name,
+                                })}
+                            >
+                                <Text style={styles.chevron}>›</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
                 )}
             />
         </SafeAreaView>
@@ -245,5 +292,25 @@ const styles = StyleSheet.create({
     chevron: {
         fontSize: 22,
         color: colors.ink[300],
+        paddingHorizontal: 4,
     },
+    editRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
+    nameInput: {
+        flex: 1,
+        borderBottomWidth: 1.5,
+        borderBottomColor: colors.ocean[500],
+        fontFamily: fontFamilies.bodyBold,
+        fontSize: fontSizes.base,
+        color: colors.ink[900],
+        paddingVertical: 2,
+    },
+    saveBtn: {
+        backgroundColor: colors.ocean[500],
+        borderRadius: radius.pill,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+    },
+    saveBtnText: { fontFamily: fontFamilies.bodyBold, fontSize: fontSizes.xs, color: '#fff' },
+    cancelBtn: { paddingHorizontal: 6, paddingVertical: 4 },
+    cancelBtnText: { fontFamily: fontFamilies.body, fontSize: fontSizes.xs, color: colors.ink[300] },
 });

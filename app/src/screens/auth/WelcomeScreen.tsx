@@ -70,7 +70,7 @@ export function WelcomeScreen({ navigation }: Props) {
                                 <Text style={[styles.label, { marginTop: 20 }]}>이름</Text>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="이름을 입력하세요"
+                                    placeholder="예: 홍길동"
                                     placeholderTextColor={colors.ink[300]}
                                     value={name}
                                     onChangeText={setName}

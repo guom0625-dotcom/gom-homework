@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../db.ts';
 import type { AuthHandler } from '../index.ts';
@@ -19,6 +20,22 @@ export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHa
         `).all(req.user.id);
 
         return students;
+    });
+
+    // PATCH /students/:id  (manager: rename student)
+    app.patch('/students/:id', { preHandler: auth }, async (req, reply) => {
+        if (req.user.role !== 'manager') return reply.code(403).send({ error: 'forbidden' });
+        const { id } = req.params as { id: string };
+        const body = z.object({ name: z.string().min(1).max(30) }).safeParse(req.body);
+        if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
+
+        const link = db.prepare(
+            'SELECT 1 FROM manager_student_link WHERE manager_id = ? AND student_id = ?'
+        ).get(req.user.id, id);
+        if (!link) return reply.code(403).send({ error: 'forbidden' });
+
+        db.prepare('UPDATE users SET name = ? WHERE id = ?').run(body.data.name, id);
+        return { ok: true };
     });
 
     // GET /students/:id/progress  (manager: specific student day progress)
