@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AuthStackParams } from '../../navigation/RootNavigator';
 import { api } from '../../api/client';
+import { useAuthStore } from '../../store/authStore';
 import { colors, fontFamilies, fontSizes, radius } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<AuthStackParams, 'Pairing'> };
@@ -14,6 +15,7 @@ type Props = { navigation: NativeStackNavigationProp<AuthStackParams, 'Pairing'>
 export function PairingScreen({ navigation }: Props) {
     const [code, setCode] = useState('');
     const [loading, setLoading] = useState(false);
+    const { init } = useAuthStore();
 
     const handleRedeem = async () => {
         if (code.length !== 6) { Alert.alert('6자리 코드를 입력해주세요'); return; }
@@ -24,7 +26,7 @@ export function PairingScreen({ navigation }: Props) {
                 body: JSON.stringify({ code }),
             });
             Alert.alert('연결 완료!', `${res.manager.name} 매니저와 연결됐어요 🎉`, [
-                { text: '확인', onPress: () => navigation.replace('StudentMain') },
+                { text: '확인', onPress: () => init() },
             ]);
         } catch {
             Alert.alert('오류', '코드가 올바르지 않거나 만료됐어요');
@@ -66,7 +68,7 @@ export function PairingScreen({ navigation }: Props) {
 
                 <TouchableOpacity
                     style={styles.skipBtn}
-                    onPress={() => navigation.replace('StudentMain')}
+                    onPress={() => init()}
                 >
                     <Text style={styles.skipText}>나중에 하기</Text>
                 </TouchableOpacity>

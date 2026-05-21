@@ -47,7 +47,10 @@ export const useAuthStore = create<AuthState>((set) => ({
         });
         await SecureStore.setItemAsync(STORE_KEY, res.key);
         setApiKey(res.key);
-        set({ key: res.key, user: { id: res.id, name: res.name, role: res.role } });
+        // user는 아직 세팅하지 않음 — 학생은 페어링 완료 후 init()으로 설정
+        if (role === 'manager') {
+            set({ key: res.key, user: { id: res.id, name: res.name, role: res.role } });
+        }
     },
 
     loginWithKey: async (key) => {
