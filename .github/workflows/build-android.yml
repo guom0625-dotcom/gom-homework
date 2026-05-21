@@ -120,6 +120,9 @@ jobs:
       # ── 6. APK 빌드 ─────────────────────────────
       - name: Build release APK
         working-directory: app/android
+        env:
+          EXPO_VERSION: ${{ env.VERSION }}
+          EXPO_VERSION_CODE: ${{ env.VERSION_CODE }}
         run: gradle :app:assembleRelease
 
       # ── 7. APK 이름 변경 ────────────────────────
