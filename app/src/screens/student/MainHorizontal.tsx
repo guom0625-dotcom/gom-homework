@@ -1,9 +1,9 @@
-import React, { useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
+import React, { useEffect, useCallback } from 'react';
+import { View, Text, ScrollView, StyleSheet, Alert, AppState } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { TopHud } from '../../components/TopHud';
 import { IslandTile } from '../../components/IslandTile';
@@ -57,6 +57,19 @@ export function MainHorizontal() {
   const navigation = useNavigation<NativeStackNavigationProp<StudentStackParams>>();
   const { user, logout } = useAuthStore();
   const { currentDay, dayStatus, points, gems, fetchMe, completeDay } = useAppStore();
+
+  // 화면 포커스 시 데이터 갱신 (다른 화면 갔다 돌아올 때)
+  useFocusEffect(useCallback(() => {
+    fetchMe().catch(() => {});
+  }, []));
+
+  // 앱이 백그라운드에서 포그라운드로 올 때 갱신
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') fetchMe().catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
 
   const character: CharacterType = 'bear';
   const islands = Array.from({ length: ISLAND_COUNT }, (_, i) => i + 1);
