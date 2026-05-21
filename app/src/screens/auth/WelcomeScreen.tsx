@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
     View, Text, TextInput, StyleSheet, TouchableOpacity,
-    ActivityIndicator, KeyboardAvoidingView, Platform, Alert,
+    ActivityIndicator, KeyboardAvoidingView, Platform, Alert, ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -42,8 +42,13 @@ export function WelcomeScreen({ navigation }: Props) {
         <SafeAreaView style={styles.safe}>
             <LinearGradient colors={gradients.sea} style={styles.bg}>
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                    style={styles.inner}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.kav}
+                >
+                <ScrollView
+                    contentContainerStyle={styles.inner}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
                 >
                     <Text style={styles.emoji}>🏝️</Text>
                     <Text style={styles.title}>gomHomework</Text>
@@ -114,6 +119,7 @@ export function WelcomeScreen({ navigation }: Props) {
                             </Text>
                         )}
                     </View>
+                </ScrollView>
                 </KeyboardAvoidingView>
             </LinearGradient>
         </SafeAreaView>
@@ -123,11 +129,13 @@ export function WelcomeScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
     safe: { flex: 1 },
     bg: { flex: 1 },
+    kav: { flex: 1 },
     inner: {
-        flex: 1,
+        flexGrow: 1,
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 24,
+        paddingVertical: 40,
     },
     emoji: { fontSize: 64, marginBottom: 8 },
     title: {

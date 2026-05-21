@@ -4,6 +4,7 @@ import {
     ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { api } from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
 import { colors, fontFamilies, fontSizes, radius } from '../../theme';
@@ -11,7 +12,13 @@ import { colors, fontFamilies, fontSizes, radius } from '../../theme';
 export function PairingScreen() {
     const [code, setCode] = useState('');
     const [loading, setLoading] = useState(false);
-    const { init } = useAuthStore();
+    const { init, logout } = useAuthStore();
+    const navigation = useNavigation();
+
+    const handleBack = async () => {
+        await logout();
+        if (navigation.canGoBack()) navigation.goBack();
+    };
 
     const handleRedeem = async () => {
         if (code.length !== 6) { Alert.alert('6자리 코드를 입력해주세요'); return; }
@@ -60,6 +67,10 @@ export function PairingScreen() {
                         ? <ActivityIndicator color="#fff" />
                         : <Text style={styles.btnText}>연결하기</Text>
                     }
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+                    <Text style={styles.backText}>← 처음으로</Text>
                 </TouchableOpacity>
 
             </View>
@@ -113,5 +124,11 @@ const styles = StyleSheet.create({
         fontFamily: fontFamilies.bodyBold,
         fontSize: fontSizes.lg,
         color: '#fff',
+    },
+    backBtn: { marginTop: 20, padding: 10 },
+    backText: {
+        fontFamily: fontFamilies.body,
+        fontSize: fontSizes.sm,
+        color: colors.ink[300],
     },
 });
