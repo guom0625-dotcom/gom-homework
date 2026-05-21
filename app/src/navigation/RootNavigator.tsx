@@ -39,6 +39,7 @@ export type ManagerStackParams = {
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
+const PairingOnlyStack = createNativeStackNavigator();
 const StudentStack = createNativeStackNavigator<StudentStackParams>();
 const ManagerStack = createNativeStackNavigator<ManagerStackParams>();
 
@@ -67,7 +68,7 @@ function ManagerNavigator() {
 export function RootNavigator() {
     useServerUrl();
     useUpdateCheck();
-    const { user, isLoading, init } = useAuthStore();
+    const { user, isLoading, init, needsPairing } = useAuthStore();
     const { fetchMe, reset } = useAppStore();
 
     useEffect(() => { init(); }, []);
@@ -91,11 +92,17 @@ export function RootNavigator() {
     return (
         <NavigationContainer>
             {!user ? (
-                <AuthStack.Navigator screenOptions={{ headerShown: false }}>
-                    <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
-                    <AuthStack.Screen name="Pairing" component={PairingScreen} />
-                    <AuthStack.Screen name="StudentMain" component={StudentNavigator as React.ComponentType} />
-                </AuthStack.Navigator>
+                needsPairing ? (
+                    <PairingOnlyStack.Navigator screenOptions={{ headerShown: false }}>
+                        <PairingOnlyStack.Screen name="Pairing" component={PairingScreen} />
+                    </PairingOnlyStack.Navigator>
+                ) : (
+                    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+                        <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
+                        <AuthStack.Screen name="Pairing" component={PairingScreen} />
+                        <AuthStack.Screen name="StudentMain" component={StudentNavigator as React.ComponentType} />
+                    </AuthStack.Navigator>
+                )
             ) : user.role === 'student' ? (
                 <StudentNavigator />
             ) : (

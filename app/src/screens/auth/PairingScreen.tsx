@@ -4,15 +4,11 @@ import {
     ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { AuthStackParams } from '../../navigation/RootNavigator';
 import { api } from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
 import { colors, fontFamilies, fontSizes, radius } from '../../theme';
 
-type Props = { navigation: NativeStackNavigationProp<AuthStackParams, 'Pairing'> };
-
-export function PairingScreen({ navigation }: Props) {
+export function PairingScreen() {
     const [code, setCode] = useState('');
     const [loading, setLoading] = useState(false);
     const { init } = useAuthStore();
@@ -66,12 +62,6 @@ export function PairingScreen({ navigation }: Props) {
                     }
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                    style={styles.skipBtn}
-                    onPress={() => init()}
-                >
-                    <Text style={styles.skipText}>나중에 하기</Text>
-                </TouchableOpacity>
             </View>
         </SafeAreaView>
     );
@@ -123,11 +113,5 @@ const styles = StyleSheet.create({
         fontFamily: fontFamilies.bodyBold,
         fontSize: fontSizes.lg,
         color: '#fff',
-    },
-    skipBtn: { marginTop: 16, padding: 10 },
-    skipText: {
-        fontFamily: fontFamilies.body,
-        fontSize: fontSizes.base,
-        color: colors.ink[300],
     },
 });

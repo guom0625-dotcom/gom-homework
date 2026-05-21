@@ -14,6 +14,7 @@ interface AuthState {
     user: AuthUser | null;
     key: string | null;
     isLoading: boolean;
+    needsPairing: boolean;
 
     init: () => Promise<void>;
     signup: (name: string, role: 'manager' | 'student') => Promise<void>;
@@ -25,18 +26,23 @@ export const useAuthStore = create<AuthState>((set) => ({
     user: null,
     key: null,
     isLoading: true,
+    needsPairing: false,
 
     init: async () => {
         try {
             const key = await SecureStore.getItemAsync(STORE_KEY);
             if (!key) { set({ isLoading: false }); return; }
             setApiKey(key);
-            const me = await api<AuthUser>('/me');
-            set({ key, user: { id: me.id, name: me.name, role: me.role }, isLoading: false });
+            const me = await api<AuthUser & { manager?: object | null }>('/me');
+            if (me.role === 'student' && !me.manager) {
+                set({ isLoading: false, needsPairing: true });
+                return;
+            }
+            set({ key, user: { id: me.id, name: me.name, role: me.role }, isLoading: false, needsPairing: false });
         } catch {
             await SecureStore.deleteItemAsync(STORE_KEY).catch(() => {});
             setApiKey(null);
-            set({ isLoading: false });
+            set({ isLoading: false, needsPairing: false });
         }
     },
 
@@ -69,6 +75,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     logout: async () => {
         await SecureStore.deleteItemAsync(STORE_KEY).catch(() => {});
         setApiKey(null);
-        set({ user: null, key: null });
+        set({ user: null, key: null, needsPairing: false });
     },
 }));
