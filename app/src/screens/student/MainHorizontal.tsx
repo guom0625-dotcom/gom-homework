@@ -58,9 +58,11 @@ export function MainHorizontal() {
   const { user } = useAuthStore();
   const { currentDay, dayStatus, points, gems, character, avatar, fetchMe, completeDay } = useAppStore();
 
-  // 화면 포커스 시 데이터 갱신 (다른 화면 갔다 돌아올 때)
+  // 화면 포커스 시 데이터 갱신 + 포커스 유지 중 30초 폴링
   useFocusEffect(useCallback(() => {
     fetchMe().catch(() => {});
+    const timer = setInterval(() => { fetchMe().catch(() => {}); }, 30_000);
+    return () => clearInterval(timer);
   }, []));
 
   // 앱이 백그라운드에서 포그라운드로 올 때 갱신
