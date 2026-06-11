@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useNavigation } from '@react-navigation/native';
+import Constants from 'expo-constants';
 import { Character } from '../../components/Character';
 import { colors, fontFamilies, fontSizes, radius } from '../../theme';
 import type { CharacterType } from '../../lib/types';
@@ -137,6 +138,10 @@ export function ProfileScreen() {
                 <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
                     <Text style={styles.logoutText}>로그아웃</Text>
                 </TouchableOpacity>
+
+                <Text style={styles.versionText}>
+                    v{Constants.expoConfig?.version ?? '—'}
+                </Text>
             </ScrollView>
         </SafeAreaView>
     );
@@ -206,4 +211,11 @@ const styles = StyleSheet.create({
     saveBtnText: { fontFamily: fontFamilies.bodyBold, fontSize: fontSizes.lg, color: '#fff' },
     logoutBtn: { alignItems: 'center', paddingVertical: 12 },
     logoutText: { fontFamily: fontFamilies.body, fontSize: fontSizes.base, color: colors.ink[400] },
+    versionText: {
+        fontFamily: fontFamilies.body,
+        fontSize: fontSizes.xs,
+        color: colors.ink[200],
+        textAlign: 'center',
+        paddingBottom: 8,
+    },
 });
