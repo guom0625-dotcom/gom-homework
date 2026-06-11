@@ -20,7 +20,7 @@ export function registerMeRoutes(app: FastifyInstance, db: Db, auth: AuthHandler
         const result: Record<string, unknown> = { ...user };
 
         if (user.role === 'student') {
-            const gems = db.prepare('SELECT * FROM gems_balance WHERE student_id = ?')
+            const gems = db.prepare('SELECT topaz, emerald, sapphire, ruby, amethyst FROM gems_balance WHERE student_id = ?')
                 .get(req.user.id) as Record<string, number> | undefined;
             result.gems = gems ?? null;
 
