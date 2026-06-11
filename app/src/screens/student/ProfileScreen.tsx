@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     saveBtnDisabled: { opacity: 0.6 },
     saveBtnText: { fontFamily: fontFamilies.bodyBold, fontSize: fontSizes.lg, color: '#fff' },
     logoutBtn: { alignItems: 'center', paddingVertical: 12 },
-    logoutText: { fontFamily: fontFamilies.body, fontSize: fontSizes.base, color: colors.ink[400] },
+    logoutText: { fontFamily: fontFamilies.body, fontSize: fontSizes.base, color: colors.ink[300] },
     versionText: {
         fontFamily: fontFamilies.body,
         fontSize: fontSizes.xs,

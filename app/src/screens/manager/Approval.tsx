@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-    View, Text, FlatList, StyleSheet, TouchableOpacity,
+    View, Text, ScrollView, StyleSheet, TouchableOpacity,
     ActivityIndicator, Alert, Modal, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,15 +26,24 @@ const GEM_OPTIONS: { key: GemKey; amount: number; label: string }[] = [
     { key: 'amethyst', amount: 1,  label: '자수정 ×1 (+25pt)' },
 ];
 
+type DayGroup = {
+    day: number;
+    tasks: Task[];
+    pendingCount: number;
+    allDone: boolean;
+};
+
+function isPending(t: Task) {
+    return t.status === 'plan_submitted' || t.status === 'submitted';
+}
+
 export function ApprovalScreen({ navigation, route }: Props) {
     const { studentId, studentName } = route.params;
     const { selectedStudentTasks, fetchStudentTasks, approveTask, rejectTask, approvePlan, rejectPlan } = useAppStore();
     const [refreshing, setRefreshing] = useState(false);
     const [approveTarget, setApproveTarget] = useState<string | null>(null);
     const [loadingId, setLoadingId] = useState<string | null>(null);
-
-    const pendingTasks = selectedStudentTasks.filter(t => t.status === 'plan_submitted' || t.status === 'submitted');
-    const otherTasks = selectedStudentTasks.filter(t => t.status !== 'plan_submitted' && t.status !== 'submitted');
+    const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
 
     useEffect(() => {
         fetchStudentTasks(studentId);
@@ -43,6 +52,50 @@ export function ApprovalScreen({ navigation, route }: Props) {
     useFocusEffect(useCallback(() => {
         fetchStudentTasks(studentId).catch(() => {});
     }, [studentId]));
+
+    // 검토 대기 있는 day는 자동 펼침, 수동 펼침도 유지
+    useEffect(() => {
+        setExpandedDays(prev => {
+            const allDays = new Set(selectedStudentTasks.map(t => t.day));
+            const next = new Set<number>();
+            selectedStudentTasks.forEach(t => { if (isPending(t)) next.add(t.day); });
+            prev.forEach(d => { if (allDays.has(d)) next.add(d); });
+            return next;
+        });
+    }, [selectedStudentTasks]);
+
+    const dayGroups: DayGroup[] = useMemo(() => {
+        const map = new Map<number, Task[]>();
+        selectedStudentTasks.forEach(t => {
+            if (!map.has(t.day)) map.set(t.day, []);
+            map.get(t.day)!.push(t);
+        });
+        return Array.from(map.entries())
+            .sort(([a], [b]) => a - b)
+            .map(([day, tasks]) => {
+                const sorted = [
+                    ...tasks.filter(isPending),
+                    ...tasks.filter(t => !isPending(t)),
+                ];
+                return {
+                    day,
+                    tasks: sorted,
+                    pendingCount: tasks.filter(isPending).length,
+                    allDone: tasks.every(t => t.status === 'approved'),
+                };
+            });
+    }, [selectedStudentTasks]);
+
+    const totalPending = dayGroups.reduce((s, g) => s + g.pendingCount, 0);
+
+    const toggleDay = (day: number) => {
+        setExpandedDays(prev => {
+            const next = new Set(prev);
+            if (next.has(day)) next.delete(day);
+            else next.add(day);
+            return next;
+        });
+    };
 
     const refresh = async () => {
         setRefreshing(true);
@@ -80,13 +133,9 @@ export function ApprovalScreen({ navigation, route }: Props) {
 
     const handleApprovePlan = async (id: string) => {
         setLoadingId(id);
-        try {
-            await approvePlan(id);
-        } catch (e: unknown) {
-            Alert.alert('오류', e instanceof Error ? e.message : '승인 실패');
-        } finally {
-            setLoadingId(null);
-        }
+        try { await approvePlan(id); }
+        catch (e: unknown) { Alert.alert('오류', e instanceof Error ? e.message : '승인 실패'); }
+        finally { setLoadingId(null); }
     };
 
     const handleRejectPlan = (id: string) => {
@@ -104,8 +153,6 @@ export function ApprovalScreen({ navigation, route }: Props) {
         ]);
     };
 
-    const allTasks = [...pendingTasks, ...otherTasks];
-
     return (
         <SafeAreaView style={styles.safe} edges={['top']}>
             <View style={styles.header}>
@@ -116,35 +163,73 @@ export function ApprovalScreen({ navigation, route }: Props) {
                 <View style={{ width: 36 }} />
             </View>
 
-            {pendingTasks.length > 0 && (
+            {totalPending > 0 && (
                 <View style={styles.pendingBanner}>
-                    <Text style={styles.pendingText}>
-                        📋 검토 대기 {pendingTasks.length}개
-                    </Text>
+                    <Text style={styles.pendingText}>📋 검토 대기 {totalPending}개</Text>
                 </View>
             )}
 
-            <FlatList
-                data={allTasks}
-                keyExtractor={t => t.id}
+            <ScrollView
                 contentContainerStyle={styles.list}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-                ListEmptyComponent={
+            >
+                {dayGroups.length === 0 && (
                     <View style={styles.empty}>
                         <Text style={styles.emptyText}>할일이 없어요</Text>
                     </View>
-                }
-                renderItem={({ item }) => (
-                    <TaskCard
-                        task={item}
-                        isLoading={loadingId === item.id}
-                        onApprovePlan={() => handleApprovePlan(item.id)}
-                        onRejectPlan={() => handleRejectPlan(item.id)}
-                        onApproveCompletion={() => setApproveTarget(item.id)}
-                        onRejectCompletion={() => handleRejectCompletion(item.id)}
-                    />
                 )}
-            />
+                {dayGroups.map(group => {
+                    const expanded = expandedDays.has(group.day);
+                    return (
+                        <View key={group.day} style={styles.daySection}>
+                            {/* Day 헤더 */}
+                            <TouchableOpacity
+                                activeOpacity={0.75}
+                                style={[
+                                    styles.dayHeader,
+                                    group.pendingCount > 0 && styles.dayHeaderPending,
+                                    expanded && styles.dayHeaderExpanded,
+                                ]}
+                                onPress={() => toggleDay(group.day)}
+                            >
+                                <View style={styles.dayHeaderLeft}>
+                                    <Text style={styles.dayLabel}>Day {group.day}</Text>
+                                    <Text style={[
+                                        styles.daySummary,
+                                        group.pendingCount > 0 ? styles.daySummaryPending
+                                            : group.allDone ? styles.daySummaryDone
+                                            : null,
+                                    ]}>
+                                        {group.pendingCount > 0
+                                            ? `⏳ 검토 대기 ${group.pendingCount}개`
+                                            : group.allDone
+                                                ? `✅ 완료 ${group.tasks.length}개`
+                                                : `진행중 · ${group.tasks.length}개`}
+                                    </Text>
+                                </View>
+                                <Text style={[styles.chevron, expanded && styles.chevronUp]}>›</Text>
+                            </TouchableOpacity>
+
+                            {/* 할일 목록 */}
+                            {expanded && (
+                                <View style={styles.taskList}>
+                                    {group.tasks.map(task => (
+                                        <TaskCard
+                                            key={task.id}
+                                            task={task}
+                                            isLoading={loadingId === task.id}
+                                            onApprovePlan={() => handleApprovePlan(task.id)}
+                                            onRejectPlan={() => handleRejectPlan(task.id)}
+                                            onApproveCompletion={() => setApproveTarget(task.id)}
+                                            onRejectCompletion={() => handleRejectCompletion(task.id)}
+                                        />
+                                    ))}
+                                </View>
+                            )}
+                        </View>
+                    );
+                })}
+            </ScrollView>
 
             {/* 보석 선택 모달 */}
             <Modal
@@ -165,10 +250,7 @@ export function ApprovalScreen({ navigation, route }: Props) {
                                 <Text style={styles.gemOptionText}>{opt.label}</Text>
                             </TouchableOpacity>
                         ))}
-                        <TouchableOpacity
-                            style={styles.cancelBtn}
-                            onPress={() => setApproveTarget(null)}
-                        >
+                        <TouchableOpacity style={styles.cancelBtn} onPress={() => setApproveTarget(null)}>
                             <Text style={styles.cancelText}>취소</Text>
                         </TouchableOpacity>
                     </View>
@@ -197,23 +279,18 @@ function TaskCard({ task, isLoading, onApprovePlan, onRejectPlan, onApproveCompl
 }) {
     const isPlanPending = task.status === 'plan_submitted';
     const isCompletionPending = task.status === 'submitted';
-    const isPending = isPlanPending || isCompletionPending;
+    const pending = isPlanPending || isCompletionPending;
 
     return (
-        <View style={[styles.taskCard, isPending && styles.taskCardPending]}>
+        <View style={[styles.taskCard, pending && styles.taskCardPending]}>
             <View style={styles.taskInfo}>
-                <View style={styles.taskDayBadge}>
-                    <Text style={styles.taskDayText}>Day {task.day}</Text>
-                </View>
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 {task.memo ? <Text style={styles.taskMemo}>{task.memo}</Text> : null}
                 {task.gem_type && task.gem_amount ? (
-                    <Text style={styles.rewardText}>
-                        💎 {task.gem_type} ×{task.gem_amount}
-                    </Text>
+                    <Text style={styles.rewardText}>💎 {task.gem_type} ×{task.gem_amount}</Text>
                 ) : null}
             </View>
-            {isPending && (
+            {pending && (
                 isLoading
                     ? <ActivityIndicator color={colors.ocean[500]} />
                     : (
@@ -240,13 +317,13 @@ function TaskCard({ task, isLoading, onApprovePlan, onRejectPlan, onApproveCompl
                         </View>
                     )
             )}
-            {!isPending && (
+            {!pending && (
                 <Text style={[styles.statusText, {
                     color: task.status === 'approved' ? colors.ocean[500]
                         : task.status === 'rejected' ? colors.coral[500]
                         : task.status === 'plan_approved' ? colors.ocean[300]
                         : task.status === 'plan_rejected' ? colors.coral[500]
-                        : colors.ink[300]
+                        : colors.ink[300],
                 }]}>
                     {STATUS_ICON[task.status] ?? '—'}
                 </Text>
@@ -292,13 +369,69 @@ const styles = StyleSheet.create({
         fontSize: fontSizes.base,
         color: colors.ink[300],
     },
-    taskCard: {
-        backgroundColor: colors.card,
-        borderRadius: radius.md,
-        padding: 14,
+
+    // Day 섹션
+    daySection: { gap: 2 },
+    dayHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
+        justifyContent: 'space-between',
+        backgroundColor: colors.paper2,
+        borderRadius: radius.md,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderLeftWidth: 3,
+        borderLeftColor: 'transparent',
+    },
+    dayHeaderPending: {
+        borderLeftColor: colors.sun[500],
+        backgroundColor: colors.sun[300] + '55',
+    },
+    dayHeaderExpanded: {
+        borderBottomLeftRadius: 0,
+        borderBottomRightRadius: 0,
+    },
+    dayHeaderLeft: { gap: 2 },
+    dayLabel: {
+        fontFamily: fontFamilies.display,
+        fontSize: fontSizes.base,
+        color: colors.ink[900],
+    },
+    daySummary: {
+        fontFamily: fontFamilies.body,
+        fontSize: fontSizes.xs,
+        color: colors.ink[300],
+    },
+    daySummaryPending: { color: colors.sun[700] },
+    daySummaryDone:    { color: colors.ocean[500] },
+    chevron: {
+        fontSize: 22,
+        color: colors.ink[300],
+        transform: [{ rotate: '90deg' }],
+    },
+    chevronUp: {
+        transform: [{ rotate: '-90deg' }],
+    },
+
+    // 할일 목록 컨테이너
+    taskList: {
+        backgroundColor: colors.paper2,
+        borderBottomLeftRadius: radius.md,
+        borderBottomRightRadius: radius.md,
+        paddingHorizontal: 10,
+        paddingBottom: 8,
+        paddingTop: 4,
+        gap: 6,
+    },
+
+    // 개별 할일 카드 (Day 뱃지 제거, 들여쓰기 적용)
+    taskCard: {
+        backgroundColor: colors.card,
+        borderRadius: radius.sm,
+        padding: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
         ...shadows.card,
     },
     taskCardPending: {
@@ -306,19 +439,6 @@ const styles = StyleSheet.create({
         borderLeftColor: colors.sun[500],
     },
     taskInfo: { flex: 1 },
-    taskDayBadge: {
-        alignSelf: 'flex-start',
-        backgroundColor: colors.sky[100],
-        borderRadius: radius.sm,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        marginBottom: 4,
-    },
-    taskDayText: {
-        fontFamily: fontFamilies.num,
-        fontSize: fontSizes.xs,
-        color: colors.sky[700],
-    },
     taskTitle: {
         fontFamily: fontFamilies.bodyMed,
         fontSize: fontSizes.base,
@@ -360,6 +480,8 @@ const styles = StyleSheet.create({
         color: colors.coral[700],
     },
     statusText: { fontSize: 18 },
+
+    // 모달
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
@@ -392,11 +514,7 @@ const styles = StyleSheet.create({
         color: colors.ink[900],
         textAlign: 'center',
     },
-    cancelBtn: {
-        paddingVertical: 14,
-        alignItems: 'center',
-        marginTop: 4,
-    },
+    cancelBtn: { paddingVertical: 14, alignItems: 'center', marginTop: 4 },
     cancelText: {
         fontFamily: fontFamilies.body,
         fontSize: fontSizes.base,
