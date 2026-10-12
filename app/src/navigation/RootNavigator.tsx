@@ -5,7 +5,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import { useAppStore } from '../store/appStore';
 import { useServerUrl } from '../hooks/useServerUrl';
-import { useUpdateCheck } from '../hooks/useUpdateCheck';
 import { WelcomeScreen } from '../screens/auth/WelcomeScreen';
 import { PairingScreen } from '../screens/auth/PairingScreen';
 import { MainScreen } from '../screens/student/MainScreen';
@@ -70,7 +69,6 @@ function ManagerNavigator() {
 
 export function RootNavigator() {
     useServerUrl();
-    useUpdateCheck();
     const { user, isLoading, init, needsPairing } = useAuthStore();
     const { fetchMe, reset } = useAppStore();
 
