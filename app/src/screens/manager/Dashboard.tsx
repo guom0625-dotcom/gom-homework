@@ -94,7 +94,7 @@ export function DashboardScreen({ navigation }: Props) {
             <View style={styles.header}>
                 <View>
                     <Text style={styles.greeting}>안녕하세요 👋</Text>
-                    <Text style={styles.managerName}>{user?.name} 매니저</Text>
+                    <Text style={styles.managerName}>{user?.name}</Text>
                 </View>
                 <TouchableOpacity onPress={() => navigation.navigate('ManagerMenu')} style={styles.menuBtn}>
                     <Text style={styles.menuText}>⚙️ 관리</Text>

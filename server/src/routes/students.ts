@@ -47,7 +47,7 @@ export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHa
             { push_token: string | null };
         const delivered = await sendPush(student.push_token, {
             title: '오늘의 할일을 등록해요 📝',
-            body: `${req.user.name} 매니저가 기다리고 있어요`,
+            body: `${req.user.name}님이 기다리고 있어요`,
             data: { type: 'nudge_register' },
         });
 

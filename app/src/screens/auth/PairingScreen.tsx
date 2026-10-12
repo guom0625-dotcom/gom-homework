@@ -28,7 +28,7 @@ export function PairingScreen() {
                 method: 'POST',
                 body: JSON.stringify({ code }),
             });
-            Alert.alert('연결 완료!', `${res.manager.name} 매니저와 연결됐어요 🎉`, [
+            Alert.alert('연결 완료!', `${res.manager.name}님과 연결됐어요 🎉`, [
                 { text: '확인', onPress: () => init() },
             ]);
         } catch {
