@@ -1,26 +1,17 @@
 import React from 'react';
 import Svg, { Defs, LinearGradient, Stop, Path, Line } from 'react-native-svg';
-import type { GemColor } from '../theme';
-
-const PALETTES: Record<GemColor, [string, string, string]> = {
-  amethyst: ['#e3ccff', '#b076ff', '#7b3fd0'],
-  ruby:     ['#ffd3df', '#ff5a7a', '#c4304f'],
-  emerald:  ['#b6f0d8', '#2dd4a4', '#0e8a66'],
-  sapphire: ['#d2e9ff', '#3a96ff', '#1d6fd0'],
-  topaz:    ['#fff0b8', '#ffc83a', '#c98c00'],
-};
+import { colors } from '../theme';
 
 interface GemProps {
   size?: number;
-  color?: GemColor;
 }
 
-export function Gem({ size = 24, color = 'amethyst' }: GemProps) {
+export function Gem({ size = 24 }: GemProps) {
   // useId()는 ":r0:" 형식으로 콜론 포함 → url(#...) 참조 깨짐, sanitize 필수
   const rawId = React.useId();
   const gradId = React.useMemo(() => `gem${rawId.replace(/:/g, '')}`, [rawId]);
 
-  const [lt, md, dk] = PALETTES[color] ?? PALETTES.amethyst;
+  const [lt, md, dk] = colors.diamond;
 
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32">

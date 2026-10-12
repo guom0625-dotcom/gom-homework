@@ -10,7 +10,6 @@ import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore, type StudentSummary } from '../../store/appStore';
 import { api } from '../../api/client';
-import { gemsToPoints } from '../../lib/gems';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'Dashboard'> };
@@ -57,9 +56,6 @@ export function DashboardScreen({ navigation }: Props) {
             setCodeLoading(false);
         }
     };
-
-    const points = (s: StudentSummary) =>
-        gemsToPoints({ topaz: s.topaz, emerald: s.emerald, sapphire: s.sapphire, ruby: s.ruby, amethyst: s.amethyst });
 
     const handleRename = async (id: string) => {
         const name = editingName.trim();
@@ -169,7 +165,7 @@ export function DashboardScreen({ navigation }: Props) {
                                 <>
                                     <Text style={styles.studentName}>{item.name}</Text>
                                     <Text style={styles.studentPoints}>
-                                        💎 {points(item).toLocaleString()} pt
+                                        💎 {item.diamonds.toLocaleString()}개
                                     </Text>
                                 </>
                             )}

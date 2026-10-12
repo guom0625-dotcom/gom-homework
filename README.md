@@ -1,9 +1,9 @@
 # gomHomework
 
-매일 할일을 완료하며 섬을 정복하는 가족용 숙제 관리 앱.
+매일 할일을 완료하며 그 달의 섬(하루 = 섬 하나)을 정복하는 가족용 숙제 관리 앱.
 
-- **학생** — 할일 등록 → 제출 → 보석 획득 → 보상 교환
-- **매니저** — 할일 승인/반려 → 보석 지급 → 보상 카탈로그 관리
+- **학생** — 할일 등록 → 제출 → 하루 할일이 전부 승인되면 다음 날 다이아 1개 → 보상 교환
+- **매니저** — 할일 승인/반려, 삭제 요청 승인 → 보상 카탈로그 관리
 
 ---
 
@@ -178,14 +178,15 @@ Base URL: `http://<서버-IP>:3100`
 
 | Method | Path | 설명 |
 |---|---|---|
-| `GET` | `/me` | 내 정보 + 보석 잔고 + 매니저 정보 |
+| `GET` | `/me` | 내 정보 + 다이아 잔고(`diamonds`) + 매니저 정보 |
 | `PATCH` | `/me` | 이름 / push_token 수정 |
-| `GET` | `/progress` | 일별 진행 상태 목록 |
-| `GET` | `/tasks?day=N` | N일차 할일 목록 |
-| `POST` | `/tasks` | 할일 등록 |
-| `POST` | `/tasks/:id/submit` | 할일 제출 |
-| `DELETE` | `/tasks/:id` | 할일 삭제 (todo 상태만) |
-| `POST` | `/day/:day/complete` | 하루 완료 (approved → complete) |
+| `GET` | `/progress?month=YYYYMM` | 해당 월의 날짜별 할일 현황 (기본: 이번 달) |
+| `GET` | `/tasks?day=YYYYMMDD` | 해당 날짜 할일 목록 |
+| `POST` | `/tasks` | 할일 등록 (오늘 날짜만) |
+| `POST` | `/tasks/:id/submit-plan` | 계획 상신 |
+| `POST` | `/tasks/:id/submit` | 완료 상신 |
+| `POST` | `/tasks/:id/request-delete` | 할일 삭제 요청 (매니저 승인 필요) |
+| `POST` | `/tasks/:id/cancel-delete` | 삭제 요청 취소 |
 | `GET` | `/catalog` | 보상 카탈로그 조회 |
 | `POST` | `/spend-requests` | 보상 구매 요청 |
 
@@ -193,28 +194,29 @@ Base URL: `http://<서버-IP>:3100`
 
 | Method | Path | 설명 |
 |---|---|---|
-| `GET` | `/students` | 연결된 학생 목록 + 보석 잔고 |
-| `GET` | `/students/:id/progress` | 특정 학생 일별 진행 상태 |
+| `GET` | `/students` | 연결된 학생 목록 + 다이아 잔고 |
+| `GET` | `/students/:id/progress?month=YYYYMM` | 특정 학생의 월별 날짜 현황 |
 | `GET` | `/tasks?student_id=xxx` | 특정 학생 할일 목록 |
-| `POST` | `/tasks/:id/approve` | 할일 승인 + 보석 지급 |
-| `POST` | `/tasks/:id/reject` | 할일 반려 |
+| `POST` | `/tasks/:id/approve` | 할일 완료 승인 |
+| `POST` | `/tasks/:id/reject` | 할일 완료 반려 |
+| `POST` | `/tasks/:id/approve-plan` · `reject-plan` | 계획 승인 / 반려 |
+| `POST` | `/tasks/:id/approve-delete` · `reject-delete` | 삭제 요청 승인(실제 삭제) / 반려 |
 | `GET/PUT` | `/rules` | 자동 보상 규칙 조회/설정 |
 | `POST` | `/catalog` | 보상 아이템 등록 |
 | `PATCH` | `/catalog/:id` | 보상 아이템 수정 |
 | `DELETE` | `/catalog/:id` | 보상 아이템 삭제 |
 | `GET` | `/spend-requests` | 보상 구매 요청 목록 |
-| `POST` | `/spend-requests/:id/approve` | 보상 요청 승인 (보석 차감) |
+| `POST` | `/spend-requests/:id/approve` | 보상 요청 승인 (다이아 차감) |
 | `POST` | `/spend-requests/:id/reject` | 보상 요청 거절 |
 
-### 보석 종류
+### 보상 (다이아)
 
-| 종류 | 포인트 | 등급 |
-|---|---|---|
-| topaz (토파즈) | 1pt | C |
-| sapphire (사파이어) | 3pt | B |
-| emerald (에메랄드) | 5pt | A |
-| ruby (루비) | 10pt | S |
-| amethyst (자수정) | 25pt | S+ |
+- 보석은 다이아 한 종류.
+- 날짜는 KST 달력 기준(`day` = `YYYYMMDD` 정수). 할일은 오늘 날짜에만 등록/상신할 수 있다.
+- 날짜가 바뀌면(KST 자정) 서버가 전날을 정산: 그날 할일이 **전부 승인**돼 있으면 다이아 1개 자동 지급 (하루 1회).
+- 매니저가 날짜가 지난 뒤 늦게 승인해서 전부 승인 상태가 되면 그 시점에 지급.
+- 할일 삭제는 학생이 요청 → 매니저가 승인해야 실제로 삭제된다.
+- 보상 카탈로그 비용은 다이아 개수(`cost`) 하나.
 
 ---
 

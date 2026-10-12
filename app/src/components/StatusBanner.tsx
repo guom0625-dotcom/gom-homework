@@ -8,20 +8,15 @@ type GradColors = readonly [string, string, ...string[]];
 const CONFIG: Record<DayStatus, { grad: GradColors; color: string; text: string; icon: string }> = {
   todo:     { grad: gradients.statusTodo,     color: '#d94545', text: '오늘의 할일을 등록하세요',   icon: '📝' },
   pending:  { grad: gradients.statusPending,  color: '#c98c00', text: '매니저가 확인하러 올거예요',  icon: '🔍' },
-  approved: { grad: gradients.statusApproved, color: '#0e8a66', text: '모두 통과! 다음 섬으로',    icon: '✨' },
-  complete: { grad: gradients.statusComplete, color: '#4d36c4', text: '오늘도 완료! 내일 또 봐요', icon: '🎉' },
+  approved: { grad: gradients.statusApproved, color: '#0e8a66', text: '모두 통과! 내일 다이아를 받아요', icon: '✨' },
 };
 
 interface StatusBannerProps {
   status: DayStatus;
-  day?: number;
 }
 
-export function StatusBanner({ status, day }: StatusBannerProps) {
+export function StatusBanner({ status }: StatusBannerProps) {
   const cfg = CONFIG[status];
-  const text = status === 'complete' && day != null
-    ? `Day ${day} 완료! 내일 또 봐요`
-    : cfg.text;
 
   return (
     <LinearGradient
@@ -31,7 +26,7 @@ export function StatusBanner({ status, day }: StatusBannerProps) {
       style={styles.container}
     >
       <Text style={styles.icon}>{cfg.icon}</Text>
-      <Text style={[styles.text, { color: cfg.color }]}>{text}</Text>
+      <Text style={[styles.text, { color: cfg.color }]}>{cfg.text}</Text>
       <Text style={[styles.arrow, { color: cfg.color }]}>›</Text>
     </LinearGradient>
   );

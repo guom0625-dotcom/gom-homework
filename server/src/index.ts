@@ -14,6 +14,9 @@ import { registerRulesRoutes } from './routes/rules.ts';
 import { registerCatalogRoutes } from './routes/catalog.ts';
 import { registerSpendRoutes } from './routes/spendRequests.ts';
 import { registerStudentRoutes } from './routes/students.ts';
+import { DAY_REWARD, settlePastDays } from './lib/gems.ts';
+import { msUntilNextKSTMidnight } from './lib/days.ts';
+import { sendPush } from './lib/push.ts';
 
 export type AuthHandler = ReturnType<typeof makeAuth>;
 
@@ -39,8 +42,32 @@ registerStudentRoutes(app, db, auth);
 
 app.get('/health', async () => ({ ok: true, time: Date.now() }));
 
+// 하루 보상 정산: 서버 시작 시 한 번, 이후 매일 KST 자정 직후.
+// 전날 할일이 전부 승인된 학생에게 다이아 지급.
+let settleTimer: NodeJS.Timeout;
+const runSettlement = () => {
+    try {
+        const rewarded = settlePastDays(db);
+        if (rewarded.length > 0) app.log.info({ rewarded }, 'day rewards settled');
+        for (const { studentId } of rewarded) {
+            const student = db.prepare('SELECT push_token FROM users WHERE id = ?').get(studentId) as
+                { push_token: string | null } | undefined;
+            void sendPush(student?.push_token, {
+                title: '할일 모두 완료!',
+                body: `다이아 ${DAY_REWARD}개를 받았어요 💎`,
+                data: { type: 'day_rewarded' },
+            });
+        }
+    } catch (err) {
+        app.log.error(err, 'day settlement failed');
+    }
+    settleTimer = setTimeout(runSettlement, msUntilNextKSTMidnight() + 5_000);
+};
+runSettlement();
+
 const shutdown = async (signal: string) => {
     app.log.info({ signal }, 'shutting down');
+    clearTimeout(settleTimer);
     await app.close();
     db.close();
     process.exit(0);

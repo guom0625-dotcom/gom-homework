@@ -9,27 +9,26 @@ const BASE_COLORS: Record<IslandState, { top: string; mid: string; base: string 
   current:  { top: '#ffe48a', mid: '#ffc83a', base: '#c98c00' },
   complete: { top: '#a8d8b9', mid: '#7ec8a0', base: '#4d9670' },
   locked:   { top: '#cdd2dd', mid: '#9aa1b3', base: '#6b7488' },
-  bonus:    { top: '#ffc3d2', mid: '#ff7da0', base: '#c4304f' },
 };
 
 interface IslandTileProps {
   state?: IslandState;
-  day: number;
+  label: string;
   size?: number;
   character?: React.ReactNode;
   gem?: React.ReactNode;
 }
 
-export function IslandTile({ state = 'pending', day, size = 84, character, gem }: IslandTileProps) {
+export function IslandTile({ state = 'pending', label, size = 84, character, gem }: IslandTileProps) {
   const w = size;
   const h = size * 0.7;
   const c = BASE_COLORS[state];
 
   return (
     <View style={{ width: w, height: h + 36, position: 'relative' }}>
-      {/* DAY 라벨 */}
+      {/* 날짜 라벨 */}
       <View style={[styles.dayLabel, { borderColor: c.mid }]}>
-        <Text style={[styles.dayText, { color: c.base }]}>DAY {day}</Text>
+        <Text style={[styles.dayText, { color: c.base }]}>{label}</Text>
       </View>
 
       {/* 섬 SVG — explicit 숫자 (% 금지) */}
@@ -64,15 +63,6 @@ export function IslandTile({ state = 'pending', day, size = 84, character, gem }
             <Rect x="3" y="14" width="20" height="14" rx="3" fill={colors.ink[500]} />
             <Path d="M7 14 V10 a6 6 0 0 1 12 0 V14" stroke={colors.ink[500]} strokeWidth="3" fill="none" />
             <Circle cx="13" cy="21" r="2.5" fill="#fff" />
-          </Svg>
-        )}
-
-        {state === 'bonus' && (
-          <Svg width="34" height="30" viewBox="0 0 34 30">
-            <Rect x="3" y="10" width="28" height="18" rx="3" fill="#8b4513" />
-            <Path d="M3 14 Q17 4 31 14 V18 H3Z" fill="#a0522d" />
-            <Rect x="14" y="14" width="6" height="6" fill={colors.sun[500]} />
-            <Rect x="15.5" y="15.5" width="3" height="3" fill="#fff" fillOpacity={0.6} />
           </Svg>
         )}
       </View>

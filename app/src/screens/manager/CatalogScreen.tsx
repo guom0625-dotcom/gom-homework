@@ -10,55 +10,34 @@ import { api } from '../../api/client';
 import type { CatalogItem } from '../../store/appStore';
 import { Gem } from '../../components/Gem';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
-import type { GemKey } from '../../lib/gems';
 
 type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'Catalog'> };
-
-const GEM_KEYS: GemKey[] = ['topaz', 'sapphire', 'emerald', 'ruby', 'amethyst'];
-const GEM_LABEL: Record<GemKey, string> = {
-    topaz: '토파즈', sapphire: '사파이어', emerald: '에메랄드',
-    ruby: '루비', amethyst: '자수정',
-};
 
 type FormData = {
     title: string;
     description: string;
-    cost_topaz: string;
-    cost_sapphire: string;
-    cost_emerald: string;
-    cost_ruby: string;
-    cost_amethyst: string;
+    cost: string;
 };
 
 const EMPTY_FORM: FormData = {
-    title: '', description: '',
-    cost_topaz: '0', cost_sapphire: '0', cost_emerald: '0',
-    cost_ruby: '0', cost_amethyst: '0',
+    title: '', description: '', cost: '1',
 };
 
 function formFromItem(item: CatalogItem): FormData {
     return {
         title: item.title,
         description: item.description ?? '',
-        cost_topaz: String(item.cost_topaz),
-        cost_sapphire: String(item.cost_sapphire),
-        cost_emerald: String(item.cost_emerald),
-        cost_ruby: String(item.cost_ruby),
-        cost_amethyst: String(item.cost_amethyst),
+        cost: String(item.cost),
     };
 }
 
 function CostRow({ item }: { item: CatalogItem }) {
-    const chips = GEM_KEYS.filter(g => (item[`cost_${g}` as keyof CatalogItem] as number) > 0);
-    if (chips.length === 0) return <Text style={styles.freeBadge}>무료</Text>;
     return (
         <View style={styles.costRow}>
-            {chips.map(g => (
-                <View key={g} style={styles.costChip}>
-                    <Gem size={13} color={g} />
-                    <Text style={styles.costNum}>{item[`cost_${g}` as keyof CatalogItem] as number}</Text>
-                </View>
-            ))}
+            <View style={styles.costChip}>
+                <Gem size={13} />
+                <Text style={styles.costNum}>{item.cost}</Text>
+            </View>
         </View>
     );
 }
@@ -106,14 +85,15 @@ export function CatalogScreen({ navigation }: Props) {
             Alert.alert('오류', '이름을 입력해주세요');
             return;
         }
+        const cost = Number(form.cost);
+        if (!Number.isInteger(cost) || cost < 1) {
+            Alert.alert('오류', '비용은 다이아 1개 이상이어야 해요');
+            return;
+        }
         const body = {
             title: form.title.trim(),
             description: form.description.trim() || null,
-            cost_topaz: Number(form.cost_topaz) || 0,
-            cost_sapphire: Number(form.cost_sapphire) || 0,
-            cost_emerald: Number(form.cost_emerald) || 0,
-            cost_ruby: Number(form.cost_ruby) || 0,
-            cost_amethyst: Number(form.cost_amethyst) || 0,
+            cost,
         };
         setSaving(true);
         try {
@@ -256,21 +236,19 @@ export function CatalogScreen({ navigation }: Props) {
                             numberOfLines={3}
                         />
 
-                        <Text style={styles.fieldLabel}>비용 (보석)</Text>
-                        {GEM_KEYS.map(g => (
-                            <View key={g} style={styles.gemRow}>
-                                <Gem size={18} color={g} />
-                                <Text style={styles.gemLabel}>{GEM_LABEL[g]}</Text>
-                                <TextInput
-                                    style={styles.gemInput}
-                                    value={form[`cost_${g}` as keyof FormData]}
-                                    onChangeText={v => setForm(f => ({ ...f, [`cost_${g}`]: v }))}
-                                    keyboardType="number-pad"
-                                    placeholder="0"
-                                    placeholderTextColor={colors.ink[300]}
-                                />
-                            </View>
-                        ))}
+                        <Text style={styles.fieldLabel}>비용 (다이아)</Text>
+                        <View style={styles.gemRow}>
+                            <Gem size={18} />
+                            <Text style={styles.gemLabel}>다이아</Text>
+                            <TextInput
+                                style={styles.gemInput}
+                                value={form.cost}
+                                onChangeText={v => setForm(f => ({ ...f, cost: v }))}
+                                keyboardType="number-pad"
+                                placeholder="1"
+                                placeholderTextColor={colors.ink[300]}
+                            />
+                        </View>
                     </ScrollView>
                 </SafeAreaView>
             </Modal>

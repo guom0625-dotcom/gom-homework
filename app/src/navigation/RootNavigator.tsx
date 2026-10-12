@@ -8,7 +8,7 @@ import { useServerUrl } from '../hooks/useServerUrl';
 import { useUpdateCheck } from '../hooks/useUpdateCheck';
 import { WelcomeScreen } from '../screens/auth/WelcomeScreen';
 import { PairingScreen } from '../screens/auth/PairingScreen';
-import { MainHorizontal } from '../screens/student/MainHorizontal';
+import { MainScreen } from '../screens/student/MainScreen';
 import { TaskListScreen } from '../screens/student/TaskList';
 import { TaskRegisterScreen } from '../screens/student/TaskRegister';
 import { DashboardScreen } from '../screens/manager/Dashboard';
@@ -48,7 +48,7 @@ const ManagerStack = createNativeStackNavigator<ManagerStackParams>();
 function StudentNavigator() {
     return (
         <StudentStack.Navigator screenOptions={{ headerShown: false }}>
-            <StudentStack.Screen name="Main" component={MainHorizontal} />
+            <StudentStack.Screen name="Main" component={MainScreen} />
             <StudentStack.Screen name="TaskList" component={TaskListScreen} />
             <StudentStack.Screen name="TaskRegister" component={TaskRegisterScreen} />
             <StudentStack.Screen name="Spend" component={SpendScreen} />

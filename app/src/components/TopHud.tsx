@@ -10,7 +10,7 @@ interface TopHudProps {
   name?: string;
   character?: CharacterType;
   mood?: CharacterMood;
-  points?: number;
+  diamonds?: number;
   streak?: number;
   photoUrl?: string;
 }
@@ -19,7 +19,7 @@ export function TopHud({
   name = '지호',
   character = 'bear',
   mood = 'happy',
-  points = 0,
+  diamonds = 0,
   streak = 0,
   photoUrl,
 }: TopHudProps) {
@@ -32,16 +32,16 @@ export function TopHud({
         <Text style={styles.streak}>🔥 {streak}일 연속</Text>
       </View>
 
-      {/* 포인트 칩 — emerald 그라데이션 */}
+      {/* 다이아 칩 */}
       <LinearGradient
-        colors={gradients.gemChipEmerald}
+        colors={gradients.gemChip}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.pointChip}
       >
-        <Gem size={20} color="emerald" />
-        <Text style={styles.pointNum}>{points.toLocaleString()}</Text>
-        <Text style={styles.pointUnit}>pt</Text>
+        <Gem size={20} />
+        <Text style={styles.pointNum}>{diamonds.toLocaleString()}</Text>
+        <Text style={styles.pointUnit}>개</Text>
       </LinearGradient>
     </View>
   );

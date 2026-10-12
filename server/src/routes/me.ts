@@ -2,7 +2,8 @@ import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../db.ts';
 import type { AuthHandler } from '../index.ts';
-import { GEM_TYPES } from '../lib/gems.ts';
+import { currentStreak, monthProgress } from '../lib/gems.ts';
+import { todayKST } from '../lib/days.ts';
 
 const PatchBody = z.object({
     name: z.string().min(1).max(30).optional(),
@@ -17,12 +18,13 @@ export function registerMeRoutes(app: FastifyInstance, db: Db, auth: AuthHandler
         const user = db.prepare('SELECT id, name, role, push_token, character, avatar FROM users WHERE id = ?')
             .get(req.user.id) as { id: string; name: string; role: string; push_token: string | null; character: string; avatar: string | null };
 
-        const result: Record<string, unknown> = { ...user };
+        const result: Record<string, unknown> = { ...user, today: todayKST() };
 
         if (user.role === 'student') {
-            const gems = db.prepare('SELECT topaz, emerald, sapphire, ruby, amethyst FROM gems_balance WHERE student_id = ?')
-                .get(req.user.id) as Record<string, number> | undefined;
-            result.gems = gems ?? null;
+            const balance = db.prepare('SELECT diamond FROM gems_balance WHERE student_id = ?')
+                .get(req.user.id) as { diamond: number } | undefined;
+            result.diamonds = balance?.diamond ?? 0;
+            result.streak = currentStreak(db, req.user.id);
 
             const link = db.prepare(`
                 SELECT u.id, u.name FROM manager_student_link l
@@ -64,11 +66,10 @@ export function registerMeRoutes(app: FastifyInstance, db: Db, auth: AuthHandler
         return { ok: true };
     });
 
-    // GET /progress  (student — own day progress)
+    // GET /progress?month=YYYYMM  (student — 해당 월의 날짜별 할일 현황, 기본은 이번 달)
     app.get('/progress', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
-        return db.prepare(
-            'SELECT * FROM day_progress WHERE student_id = ? ORDER BY day ASC'
-        ).all(req.user.id);
+        const { month } = req.query as { month?: string };
+        return monthProgress(db, req.user.id, Number(month) || Math.floor(todayKST() / 100));
     });
 }

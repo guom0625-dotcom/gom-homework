@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
     View, Text, ScrollView, StyleSheet, TouchableOpacity,
-    ActivityIndicator, Alert, Modal, RefreshControl,
+    ActivityIndicator, Alert, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -9,22 +9,13 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { useAppStore, type Task } from '../../store/appStore';
-import { GEM_VALUES, type GemKey } from '../../lib/gems';
+import { formatDay } from '../../lib/days';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = {
     navigation: NativeStackNavigationProp<ManagerStackParams, 'Approval'>;
     route: RouteProp<ManagerStackParams, 'Approval'>;
 };
-
-const GEM_OPTIONS: { key: GemKey; amount: number; label: string }[] = [
-    { key: 'topaz',    amount: 1,  label: '토파즈 ×1 (+1pt)' },
-    { key: 'topaz',    amount: 3,  label: '토파즈 ×3 (+3pt)' },
-    { key: 'emerald',  amount: 1,  label: '에메랄드 ×1 (+5pt)' },
-    { key: 'sapphire', amount: 1,  label: '사파이어 ×1 (+3pt)' },
-    { key: 'ruby',     amount: 1,  label: '루비 ×1 (+10pt)' },
-    { key: 'amethyst', amount: 1,  label: '자수정 ×1 (+25pt)' },
-];
 
 type DayGroup = {
     day: number;
@@ -34,14 +25,16 @@ type DayGroup = {
 };
 
 function isPending(t: Task) {
-    return t.status === 'plan_submitted' || t.status === 'submitted';
+    return t.status === 'plan_submitted' || t.status === 'submitted' || t.status === 'delete_requested';
 }
 
 export function ApprovalScreen({ navigation, route }: Props) {
     const { studentId, studentName } = route.params;
-    const { selectedStudentTasks, fetchStudentTasks, approveTask, rejectTask, approvePlan, rejectPlan } = useAppStore();
+    const {
+        selectedStudentTasks, fetchStudentTasks, approveTask, rejectTask, approvePlan, rejectPlan,
+        approveDelete, rejectDelete,
+    } = useAppStore();
     const [refreshing, setRefreshing] = useState(false);
-    const [approveTarget, setApproveTarget] = useState<string | null>(null);
     const [loadingId, setLoadingId] = useState<string | null>(null);
     const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
 
@@ -71,7 +64,7 @@ export function ApprovalScreen({ navigation, route }: Props) {
             map.get(t.day)!.push(t);
         });
         return Array.from(map.entries())
-            .sort(([a], [b]) => a - b)
+            .sort(([a], [b]) => b - a)  // 최근 날짜가 위로
             .map(([day, tasks]) => {
                 const sorted = [
                     ...tasks.filter(isPending),
@@ -103,12 +96,10 @@ export function ApprovalScreen({ navigation, route }: Props) {
         setRefreshing(false);
     };
 
-    const handleApproveCompletion = async (gemKey: GemKey, gemAmount: number) => {
-        if (!approveTarget) return;
-        setLoadingId(approveTarget);
-        setApproveTarget(null);
+    const handleApproveCompletion = async (id: string) => {
+        setLoadingId(id);
         try {
-            await approveTask(approveTarget, gemKey, gemAmount);
+            await approveTask(id);
         } catch (e: unknown) {
             Alert.alert('오류', e instanceof Error ? e.message : '승인 실패');
         } finally {
@@ -153,6 +144,28 @@ export function ApprovalScreen({ navigation, route }: Props) {
         ]);
     };
 
+    const handleApproveDelete = (id: string) => {
+        Alert.alert('삭제 승인', '이 할일을 삭제할까요?', [
+            { text: '취소', style: 'cancel' },
+            {
+                text: '삭제', style: 'destructive',
+                onPress: async () => {
+                    setLoadingId(id);
+                    try { await approveDelete(id); }
+                    catch (e: unknown) { Alert.alert('오류', e instanceof Error ? e.message : '삭제 실패'); }
+                    finally { setLoadingId(null); }
+                },
+            },
+        ]);
+    };
+
+    const handleRejectDelete = async (id: string) => {
+        setLoadingId(id);
+        try { await rejectDelete(id); }
+        catch (e: unknown) { Alert.alert('오류', e instanceof Error ? e.message : '반려 실패'); }
+        finally { setLoadingId(null); }
+    };
+
     return (
         <SafeAreaView style={styles.safe} edges={['top']}>
             <View style={styles.header}>
@@ -193,7 +206,7 @@ export function ApprovalScreen({ navigation, route }: Props) {
                                 onPress={() => toggleDay(group.day)}
                             >
                                 <View style={styles.dayHeaderLeft}>
-                                    <Text style={styles.dayLabel}>Day {group.day}</Text>
+                                    <Text style={styles.dayLabel}>{formatDay(group.day)}</Text>
                                     <Text style={[
                                         styles.daySummary,
                                         group.pendingCount > 0 ? styles.daySummaryPending
@@ -220,8 +233,10 @@ export function ApprovalScreen({ navigation, route }: Props) {
                                             isLoading={loadingId === task.id}
                                             onApprovePlan={() => handleApprovePlan(task.id)}
                                             onRejectPlan={() => handleRejectPlan(task.id)}
-                                            onApproveCompletion={() => setApproveTarget(task.id)}
+                                            onApproveCompletion={() => handleApproveCompletion(task.id)}
                                             onRejectCompletion={() => handleRejectCompletion(task.id)}
+                                            onApproveDelete={() => handleApproveDelete(task.id)}
+                                            onRejectDelete={() => handleRejectDelete(task.id)}
                                         />
                                     ))}
                                 </View>
@@ -230,32 +245,6 @@ export function ApprovalScreen({ navigation, route }: Props) {
                     );
                 })}
             </ScrollView>
-
-            {/* 보석 선택 모달 */}
-            <Modal
-                visible={approveTarget !== null}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setApproveTarget(null)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalCard}>
-                        <Text style={styles.modalTitle}>보상 보석 선택</Text>
-                        {GEM_OPTIONS.map((opt, i) => (
-                            <TouchableOpacity
-                                key={i}
-                                style={styles.gemOption}
-                                onPress={() => handleApproveCompletion(opt.key, opt.amount)}
-                            >
-                                <Text style={styles.gemOptionText}>{opt.label}</Text>
-                            </TouchableOpacity>
-                        ))}
-                        <TouchableOpacity style={styles.cancelBtn} onPress={() => setApproveTarget(null)}>
-                            <Text style={styles.cancelText}>취소</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
         </SafeAreaView>
     );
 }
@@ -269,33 +258,46 @@ const STATUS_ICON: Partial<Record<Task['status'], string>> = {
     todo:          '—',
 };
 
-function TaskCard({ task, isLoading, onApprovePlan, onRejectPlan, onApproveCompletion, onRejectCompletion }: {
+function TaskCard({
+    task, isLoading, onApprovePlan, onRejectPlan, onApproveCompletion, onRejectCompletion,
+    onApproveDelete, onRejectDelete,
+}: {
     task: Task;
     isLoading: boolean;
     onApprovePlan: () => void;
     onRejectPlan: () => void;
     onApproveCompletion: () => void;
     onRejectCompletion: () => void;
+    onApproveDelete: () => void;
+    onRejectDelete: () => void;
 }) {
     const isPlanPending = task.status === 'plan_submitted';
     const isCompletionPending = task.status === 'submitted';
-    const pending = isPlanPending || isCompletionPending;
+    const isDeletePending = task.status === 'delete_requested';
+    const pending = isPlanPending || isCompletionPending || isDeletePending;
 
     return (
         <View style={[styles.taskCard, pending && styles.taskCardPending]}>
             <View style={styles.taskInfo}>
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 {task.memo ? <Text style={styles.taskMemo}>{task.memo}</Text> : null}
-                {task.gem_type && task.gem_amount ? (
-                    <Text style={styles.rewardText}>💎 {task.gem_type} ×{task.gem_amount}</Text>
-                ) : null}
+                {isDeletePending ? <Text style={styles.deleteNote}>🗑 삭제를 요청했어요</Text> : null}
             </View>
             {pending && (
                 isLoading
                     ? <ActivityIndicator color={colors.ocean[500]} />
                     : (
                         <View style={styles.taskActions}>
-                            {isPlanPending ? (
+                            {isDeletePending ? (
+                                <>
+                                    <TouchableOpacity style={styles.approveBtn} onPress={onApproveDelete}>
+                                        <Text style={styles.approveBtnText}>🗑 삭제 승인</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.rejectBtn} onPress={onRejectDelete}>
+                                        <Text style={styles.rejectBtnText}>❌ 반려</Text>
+                                    </TouchableOpacity>
+                                </>
+                            ) : isPlanPending ? (
                                 <>
                                     <TouchableOpacity style={styles.approveBtn} onPress={onApprovePlan}>
                                         <Text style={styles.approveBtnText}>📋 계획 승인</Text>
@@ -450,10 +452,10 @@ const styles = StyleSheet.create({
         color: colors.ink[500],
         marginTop: 2,
     },
-    rewardText: {
-        fontFamily: fontFamilies.num,
+    deleteNote: {
+        fontFamily: fontFamilies.bodyMed,
         fontSize: fontSizes.sm,
-        color: colors.grape[700],
+        color: colors.coral[700],
         marginTop: 4,
     },
     taskActions: { gap: 6 },
@@ -480,44 +482,4 @@ const styles = StyleSheet.create({
         color: colors.coral[700],
     },
     statusText: { fontSize: 18 },
-
-    // 모달
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'flex-end',
-    },
-    modalCard: {
-        backgroundColor: colors.card,
-        borderTopLeftRadius: radius.xl,
-        borderTopRightRadius: radius.xl,
-        padding: 24,
-        paddingBottom: 40,
-        gap: 10,
-    },
-    modalTitle: {
-        fontFamily: fontFamilies.display,
-        fontSize: fontSizes['2xl'],
-        color: colors.ink[900],
-        textAlign: 'center',
-        marginBottom: 4,
-    },
-    gemOption: {
-        backgroundColor: colors.paper2,
-        borderRadius: radius.md,
-        paddingVertical: 14,
-        paddingHorizontal: 16,
-    },
-    gemOptionText: {
-        fontFamily: fontFamilies.bodyMed,
-        fontSize: fontSizes.base,
-        color: colors.ink[900],
-        textAlign: 'center',
-    },
-    cancelBtn: { paddingVertical: 14, alignItems: 'center', marginTop: 4 },
-    cancelText: {
-        fontFamily: fontFamilies.body,
-        fontSize: fontSizes.base,
-        color: colors.ink[300],
-    },
 });

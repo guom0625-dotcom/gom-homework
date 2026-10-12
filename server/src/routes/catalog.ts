@@ -6,12 +6,8 @@ import type { AuthHandler } from '../index.ts';
 
 const ItemBody = z.object({
     title: z.string().min(1).max(100),
-    description: z.string().max(500).optional(),
-    cost_topaz:    z.number().int().min(0).default(0),
-    cost_emerald:  z.number().int().min(0).default(0),
-    cost_sapphire: z.number().int().min(0).default(0),
-    cost_ruby:     z.number().int().min(0).default(0),
-    cost_amethyst: z.number().int().min(0).default(0),
+    description: z.string().max(500).nullable().optional(),
+    cost: z.number().int().min(1),
 });
 
 export function registerCatalogRoutes(app: FastifyInstance, db: Db, auth: AuthHandler): void {
@@ -42,14 +38,9 @@ export function registerCatalogRoutes(app: FastifyInstance, db: Db, auth: AuthHa
         const now = Date.now();
         db.prepare(`
             INSERT INTO reward_catalog
-                (id, manager_id, title, description, cost_topaz, cost_emerald,
-                 cost_sapphire, cost_ruby, cost_amethyst, active, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-        `).run(
-            id, req.user.id, body.data.title, body.data.description ?? null,
-            body.data.cost_topaz, body.data.cost_emerald, body.data.cost_sapphire,
-            body.data.cost_ruby, body.data.cost_amethyst, now
-        );
+                (id, manager_id, title, description, cost, active, created_at)
+            VALUES (?, ?, ?, ?, ?, 1, ?)
+        `).run(id, req.user.id, body.data.title, body.data.description ?? null, body.data.cost, now);
 
         return reply.code(201).send(db.prepare('SELECT * FROM reward_catalog WHERE id = ?').get(id));
     });
@@ -73,7 +64,7 @@ export function registerCatalogRoutes(app: FastifyInstance, db: Db, auth: AuthHa
 
         db.prepare(`UPDATE reward_catalog SET ${fields} WHERE id = ?`)
             .run(...Object.values(body.data), id);
-        return { ok: true };
+        return db.prepare('SELECT * FROM reward_catalog WHERE id = ?').get(id);
     });
 
     // DELETE /catalog/:id  (soft delete, manager only)

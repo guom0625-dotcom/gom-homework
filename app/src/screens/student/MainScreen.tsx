@@ -1,5 +1,8 @@
-import React, { useEffect, useCallback, useRef } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert, AppState, type AppStateStatus } from 'react-native';
+import React, { useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, AppState, useWindowDimensions,
+  type AppStateStatus,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -10,53 +13,34 @@ import { IslandTile } from '../../components/IslandTile';
 import { Character } from '../../components/Character';
 import { Gem } from '../../components/Gem';
 import { Cloud } from '../../components/Cloud';
-import { Palm } from '../../components/Palm';
 import { Button } from '../../components/Button';
 import { StatusBanner } from '../../components/StatusBanner';
-import { colors, fontFamilies, fontSizes, gradients, radius, shadows } from '../../theme';
+import { colors, fontFamilies, fontSizes, gradients } from '../../theme';
+import { dayParts, monthDays } from '../../lib/days';
 import type { DayStatus, IslandState } from '../../lib/types';
-import type { GemColor } from '../../theme';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 
-const TOTAL_DAYS = 30;
-const ISLAND_COUNT = 14;
-const ISLAND_STEP = 95;
-const MAP_WIDTH = ISLAND_COUNT * ISLAND_STEP + 60;
-const MAP_HEIGHT = 360;
-
-const GEM_COLORS: GemColor[] = ['amethyst', 'ruby', 'emerald', 'sapphire', 'topaz'];
-const BONUS_DAYS = new Set([7, 14, 21, 30]);
-
-function islandState(day: number, currentDay: number): IslandState {
-  const state: IslandState =
-    day < currentDay ? 'complete'
-    : day === currentDay ? 'current'
-    : (day === 7 || day === 14 || day === 21) && day <= currentDay ? 'complete'
-    : (day === 7 || day === 14 || day === 21) ? 'bonus'
-    : day > currentDay + 4 ? 'locked'
-    : 'pending';
-
-  const finalState: IslandState =
-    (day === 7 && day > currentDay) ? 'bonus'
-    : (day === 14 && day > currentDay) ? 'bonus'
-    : state;
-
-  return finalState;
-}
+// 이번 달 섬 지도 — 한 줄에 COLS개씩, 줄마다 방향을 바꿔 'ㄹ'자로 이어진다
+const COLS = 4;
+const TILE = 76;
+const PAD_X = 22;
+const PAD_TOP = 14;
+const ROW_STEP = 118;
+const PATH_Y = 62;  // 타일 상단 → 섬 중심까지
 
 const ACTION_LABEL: Record<DayStatus, string> = {
   todo:     '오늘의 할일 등록',
   pending:  '할일 목록 보기',
-  approved: '다음 섬으로 가기 🚀',
-  complete: '내일 다시 도전',
+  approved: '오늘 할일 완료! 🎉',
 };
 
-export function MainHorizontal() {
+export function MainScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<StudentStackParams>>();
+  const { width } = useWindowDimensions();
   const { user } = useAuthStore();
-  const { currentDay, dayStatus, points, gems, character, avatar, fetchMe, completeDay } = useAppStore();
+  const { today, dayStatus, diamonds, streak, monthProgress, character, avatar, fetchMe } = useAppStore();
 
   // 화면 포커스 시 데이터 갱신 + 포커스 유지 중 30초 폴링
   useFocusEffect(useCallback(() => {
@@ -77,35 +61,51 @@ export function MainHorizontal() {
     return () => sub.remove();
   }, []);
 
-  const islands = Array.from({ length: ISLAND_COUNT }, (_, i) => i + 1);
+  const days = useMemo(() => (today ? monthDays(today) : []), [today]);
+  const doneDays = useMemo(
+    () => new Set(monthProgress.filter(p => p.total > 0 && p.approved === p.total).map(p => p.day)),
+    [monthProgress],
+  );
 
-  const islandX = (i: number) => 50 + i * ISLAND_STEP;
-  const islandY = (i: number) => 200 + Math.sin(i * 0.6) * 50;
+  const rows = Math.ceil(days.length / COLS);
+  const mapHeight = PAD_TOP + rows * ROW_STEP + 12;
+  const colStep = (width - PAD_X * 2 - TILE) / (COLS - 1);
 
-  const pathD = islands
-    .map((_, i) => `${i === 0 ? 'M' : 'L'} ${islandX(i)} ${islandY(i)}`)
+  const islandPos = (i: number) => {
+    const row = Math.floor(i / COLS);
+    const pos = i % COLS;
+    const col = row % 2 === 0 ? pos : COLS - 1 - pos;
+    return { x: PAD_X + col * colStep, y: PAD_TOP + row * ROW_STEP };
+  };
+
+  const pathD = days
+    .map((_, i) => {
+      const { x, y } = islandPos(i);
+      return `${i === 0 ? 'M' : 'L'} ${x + TILE / 2} ${y + PATH_Y}`;
+    })
     .join(' ');
 
-  const daysUntilBonus = 7 - (currentDay % 7) || 7;
+  const islandState = (day: number): IslandState =>
+    day > today ? 'locked'
+    : day === today ? 'current'
+    : doneDays.has(day) ? 'complete'
+    : 'pending';
 
-  const handleMainAction = async () => {
-    if (dayStatus === 'todo') {
-      navigation.navigate('TaskRegister', { day: currentDay });
-    } else if (dayStatus === 'pending') {
-      navigation.navigate('TaskList', { day: currentDay });
-    } else if (dayStatus === 'approved') {
-      try {
-        await completeDay(currentDay);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : '오류가 발생했어요';
-        if (msg === 'too_early') {
-          Alert.alert('아직 이른 시간이에요', '다음 날이 되면 다음 섬으로 넘어갈 수 있어요 🌙');
-        } else {
-          Alert.alert('오류', msg);
-        }
-      }
-    }
+  // 오늘 섬이 보이도록 스크롤 (오늘 줄의 한 줄 위부터)
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollToToday = useCallback(() => {
+    if (!today) return;
+    const row = Math.floor((dayParts(today).d - 1) / COLS);
+    scrollRef.current?.scrollTo({ y: Math.max(0, PAD_TOP + (row - 1) * ROW_STEP), animated: false });
+  }, [today]);
+  useEffect(scrollToToday, [scrollToToday]);
+
+  const handleMainAction = () => {
+    if (dayStatus === 'todo') navigation.navigate('TaskRegister', { day: today });
+    else navigation.navigate('TaskList', { day: today });
   };
+
+  const { m, d } = dayParts(today);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -119,32 +119,31 @@ export function MainHorizontal() {
             name={user?.name ?? ''}
             character={character}
             photoUrl={avatar ?? undefined}
-            points={points}
-            streak={currentDay}
+            diamonds={diamonds}
+            streak={streak}
           />
         </View>
 
-        <View style={styles.dayBlock}>
-          <View style={styles.dayRow}>
-            <Text style={styles.dayLabel}>오늘은</Text>
-            <Text style={styles.dayNum}>DAY {currentDay}</Text>
+        {today > 0 && (
+          <View style={styles.dayBlock}>
+            <View style={styles.dayRow}>
+              <Text style={styles.dayLabel}>오늘은</Text>
+              <Text style={styles.dayNum}>{m}월 {d}일</Text>
+            </View>
+            <Text style={styles.daySub}>
+              {m}월의 섬 {days.length}개 · 정복한 섬 {doneDays.size}개
+            </Text>
           </View>
-          <Text style={styles.daySub}>
-            / {TOTAL_DAYS}일 챌린지 · 다음 보너스까지 {daysUntilBonus}일
-          </Text>
-        </View>
+        )}
 
         <View style={styles.mapArea}>
           <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ width: MAP_WIDTH, height: MAP_HEIGHT }}
+            ref={scrollRef}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ height: mapHeight }}
+            onLayout={scrollToToday}
           >
-            <Svg
-              width={MAP_WIDTH}
-              height={MAP_HEIGHT}
-              style={StyleSheet.absoluteFillObject}
-            >
+            <Svg width={width} height={mapHeight} style={StyleSheet.absoluteFillObject}>
               <Path
                 d={pathD}
                 stroke="rgba(255,255,255,0.55)"
@@ -152,41 +151,41 @@ export function MainHorizontal() {
                 fill="none"
                 strokeDasharray="2 8"
                 strokeLinecap="round"
+                strokeLinejoin="round"
               />
             </Svg>
 
-            {islands.map((day, i) => {
-              const x = islandX(i);
-              const y = islandY(i);
-              const state = islandState(day, currentDay);
-              const isCurrent = day === currentDay;
+            {days.map((day, i) => {
+              const { x, y } = islandPos(i);
+              const state = islandState(day);
 
               return (
-                <View
+                <TouchableOpacity
                   key={day}
-                  style={{ position: 'absolute', left: x - 42, top: y - 30 }}
+                  activeOpacity={0.8}
+                  disabled={state === 'locked'}
+                  style={{ position: 'absolute', left: x, top: y }}
+                  onPress={() => navigation.navigate('TaskList', { day })}
                 >
                   <IslandTile
                     state={state}
-                    day={day}
-                    size={80}
+                    label={`${dayParts(day).d}일`}
+                    size={TILE}
                     character={
-                      isCurrent ? (
-                        <Character type={character} size={48} mood="happy" />
+                      state === 'current' ? (
+                        <Character type={character} size={46} mood="happy" />
                       ) : undefined
                     }
-                    gem={<Gem size={30} color={GEM_COLORS[day % 5]} />}
+                    gem={<Gem size={28} />}
                   />
-                </View>
+                </TouchableOpacity>
               );
             })}
-
-            <Palm size={36} style={{ position: 'absolute', left: 22, top: 130 }} />
           </ScrollView>
         </View>
 
         <View style={styles.bottomSheet}>
-          <StatusBanner status={dayStatus} day={currentDay} />
+          <StatusBanner status={dayStatus} />
 
           <View style={styles.actionRow}>
             <View style={styles.sideBtn}>
@@ -195,7 +194,7 @@ export function MainHorizontal() {
                 size="md"
                 label="📋"
                 style={styles.squareBtn}
-                onPress={() => navigation.navigate('TaskList', { day: currentDay })}
+                onPress={() => navigation.navigate('TaskList', { day: today })}
               />
             </View>
 
@@ -265,9 +264,9 @@ const styles = StyleSheet.create({
   },
   dayNum: {
     fontFamily: fontFamilies.display,
-    fontSize: 48,
+    fontSize: 40,
     color: '#fff',
-    lineHeight: 52,
+    lineHeight: 46,
     textShadowColor: 'rgba(29,35,48,0.18)',
     textShadowOffset: { width: 0, height: 3 },
     textShadowRadius: 0,

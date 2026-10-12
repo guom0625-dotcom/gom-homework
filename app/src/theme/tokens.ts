@@ -34,13 +34,8 @@ export const colors = {
   mint: {
     500: '#7ee0a8',
   },
-  gem: {
-    amethyst: '#b076ff',
-    ruby:     '#ff5a7a',
-    emerald:  '#2dd4a4',
-    sapphire: '#3a96ff',
-    topaz:    '#ffc83a',
-  },
+  // 보석은 다이아 한 종류 — [light, mid, dark]
+  diamond: ['#dff4ff', '#5cc4ff', '#1f86d6'],
   paper:  '#fffaf2',
   paper2: '#fdf3df',
   card:   '#ffffff',
@@ -98,10 +93,9 @@ export const gradients = {
   statusTodo:     ['#ffe2d6', '#ff8a66'],
   statusPending:  ['#fff1c2', '#ffd980'],
   statusApproved: ['#cdf3e2', '#7ee0a8'],
-  statusComplete: ['#ebe3ff', '#c6b5ff'],
 
   // TopHud gem chip
-  gemChipEmerald: ['#e8f6ed', '#b6f0d8'],
+  gemChip: ['#eaf7ff', '#c2e8ff'],
 } as const;
 
 // RN shadow (iOS 기준, Android elevation도 함께)
@@ -139,4 +133,3 @@ export const buttonColors = {
 } as const;
 
 export type ButtonVariant = keyof typeof buttonColors;
-export type GemColor = keyof typeof colors.gem;

@@ -58,7 +58,7 @@ export function SpendApprovalScreen({ navigation }: Props) {
     const handleApprove = (req: SpendRequest) => {
         Alert.alert(
             '요청 승인',
-            `"${req.catalog_title}" 요청을 승인할까요?\n${req.student_name ?? '학생'}의 보석이 차감됩니다.`,
+            `"${req.catalog_title}" 요청을 승인할까요?\n${req.student_name ?? '학생'}의 다이아가 차감됩니다.`,
             [
                 { text: '취소', style: 'cancel' },
                 {
@@ -72,7 +72,7 @@ export function SpendApprovalScreen({ navigation }: Props) {
                             );
                         } catch (e: unknown) {
                             const msg = e instanceof Error ? e.message : '오류';
-                            Alert.alert('오류', msg === 'insufficient_gems' ? '보석이 부족해요' : msg);
+                            Alert.alert('오류', msg === 'insufficient_gems' ? '다이아가 부족해요' : msg);
                         } finally {
                             setProcessingId(null);
                         }

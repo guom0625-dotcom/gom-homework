@@ -9,6 +9,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
 import { useAppStore } from '../../store/appStore';
+import { formatDay } from '../../lib/days';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 import type { Task } from '../../store/appStore';
 
@@ -25,6 +26,7 @@ const STATUS_LABEL: Record<Task['status'], string> = {
     submitted:      '⏳ 완료 검토중',
     approved:       '✅ 완료 승인',
     rejected:       '❌ 완료 반려',
+    delete_requested: '🗑 삭제 요청중',
 };
 const STATUS_COLOR: Record<Task['status'], string> = {
     todo:           colors.ink[300],
@@ -34,11 +36,14 @@ const STATUS_COLOR: Record<Task['status'], string> = {
     submitted:      colors.sun[500],
     approved:       colors.ocean[500],
     rejected:       colors.coral[500],
+    delete_requested: colors.ink[500],
 };
 
 export function TaskListScreen({ navigation, route }: Props) {
     const { day } = route.params;
-    const { tasks, fetchTasks, submitTask, deleteTask, submitPlan } = useAppStore();
+    const { today, tasks, fetchTasks, submitTask, submitPlan, requestDeleteTask, cancelDeleteTask } = useAppStore();
+    // 지난 날짜는 보기 전용 — 등록/상신/삭제 요청은 오늘 할일만 가능
+    const isToday = day === today;
     const [refreshing, setRefreshing] = useState(false);
     const [loadingId, setLoadingId] = useState<string | null>(null);
 
@@ -77,15 +82,21 @@ export function TaskListScreen({ navigation, route }: Props) {
     };
 
     const handleDelete = (id: string) => {
-        Alert.alert('삭제', '이 할일을 삭제할까요?', [
+        Alert.alert('삭제 요청', '매니저가 승인하면 삭제돼요. 삭제를 요청할까요?', [
             { text: '취소', style: 'cancel' },
             {
-                text: '삭제', style: 'destructive',
-                onPress: () => deleteTask(id).catch(e =>
-                    Alert.alert('오류', e instanceof Error ? e.message : '삭제 실패')
+                text: '삭제 요청', style: 'destructive',
+                onPress: () => requestDeleteTask(id).catch((e: unknown) =>
+                    Alert.alert('오류', e instanceof Error ? e.message : '삭제 요청 실패')
                 ),
             },
         ]);
+    };
+
+    const handleCancelDelete = (id: string) => {
+        cancelDeleteTask(id).catch((e: unknown) =>
+            Alert.alert('오류', e instanceof Error ? e.message : '취소 실패')
+        );
     };
 
     return (
@@ -94,13 +105,15 @@ export function TaskListScreen({ navigation, route }: Props) {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
                     <Text style={styles.backText}>‹</Text>
                 </TouchableOpacity>
-                <Text style={styles.title}>Day {day} 할일 목록</Text>
-                <TouchableOpacity
-                    style={styles.addBtn}
-                    onPress={() => navigation.navigate('TaskRegister', { day })}
-                >
-                    <Text style={styles.addBtnText}>+ 추가</Text>
-                </TouchableOpacity>
+                <Text style={styles.title}>{formatDay(day)} 할일</Text>
+                {isToday ? (
+                    <TouchableOpacity
+                        style={styles.addBtn}
+                        onPress={() => navigation.navigate('TaskRegister', { day })}
+                    >
+                        <Text style={styles.addBtnText}>+ 추가</Text>
+                    </TouchableOpacity>
+                ) : <View style={{ width: 36 }} />}
             </View>
 
             <FlatList
@@ -110,7 +123,9 @@ export function TaskListScreen({ navigation, route }: Props) {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
                 ListEmptyComponent={
                     <View style={styles.empty}>
-                        <Text style={styles.emptyText}>할일이 없어요{'\n'}+ 추가를 눌러 등록해보세요</Text>
+                        <Text style={styles.emptyText}>
+                            {isToday ? '할일이 없어요\n+ 추가를 눌러 등록해보세요' : '이 날은 등록한 할일이 없어요'}
+                        </Text>
                     </View>
                 }
                 renderItem={({ item }) => (
@@ -118,17 +133,12 @@ export function TaskListScreen({ navigation, route }: Props) {
                         <View style={styles.taskMain}>
                             <Text style={styles.taskTitle}>{item.title}</Text>
                             {item.memo ? <Text style={styles.taskMemo}>{item.memo}</Text> : null}
-                            {item.gem_type && item.gem_amount ? (
-                                <Text style={styles.rewardText}>
-                                    💎 {item.gem_type} × {item.gem_amount}
-                                </Text>
-                            ) : null}
                         </View>
                         <View style={styles.taskRight}>
                             <Text style={[styles.statusBadge, { color: STATUS_COLOR[item.status] }]}>
                                 {STATUS_LABEL[item.status]}
                             </Text>
-                            {(item.status === 'todo' || item.status === 'plan_rejected') && (
+                            {isToday && (item.status === 'todo' || item.status === 'plan_rejected') && (
                                 <View style={styles.actionBtns}>
                                     {loadingId === item.id
                                         ? <ActivityIndicator size="small" color={colors.ocean[500]} />
@@ -141,12 +151,9 @@ export function TaskListScreen({ navigation, route }: Props) {
                                             </TouchableOpacity>
                                         )
                                     }
-                                    <TouchableOpacity onPress={() => handleDelete(item.id)}>
-                                        <Text style={styles.deleteBtn}>🗑</Text>
-                                    </TouchableOpacity>
                                 </View>
                             )}
-                            {(item.status === 'plan_approved' || item.status === 'rejected') && (
+                            {isToday && (item.status === 'plan_approved' || item.status === 'rejected') && (
                                 <View style={styles.actionBtns}>
                                     {loadingId === item.id
                                         ? <ActivityIndicator size="small" color={colors.ocean[500]} />
@@ -162,6 +169,16 @@ export function TaskListScreen({ navigation, route }: Props) {
                                         )
                                     }
                                 </View>
+                            )}
+                            {isToday && item.status === 'delete_requested' && (
+                                <TouchableOpacity onPress={() => handleCancelDelete(item.id)}>
+                                    <Text style={styles.cancelDeleteText}>요청 취소</Text>
+                                </TouchableOpacity>
+                            )}
+                            {isToday && item.status !== 'approved' && item.status !== 'delete_requested' && (
+                                <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                                    <Text style={styles.deleteBtn}>🗑</Text>
+                                </TouchableOpacity>
                             )}
                         </View>
                     </View>
@@ -231,12 +248,6 @@ const styles = StyleSheet.create({
         color: colors.ink[500],
         marginTop: 4,
     },
-    rewardText: {
-        fontFamily: fontFamilies.num,
-        fontSize: fontSizes.sm,
-        color: colors.grape[700],
-        marginTop: 4,
-    },
     taskRight: { alignItems: 'flex-end', gap: 8, minWidth: 60 },
     statusBadge: {
         fontFamily: fontFamilies.bodyMed,
@@ -255,4 +266,9 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     deleteBtn: { fontSize: 18 },
+    cancelDeleteText: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.sm,
+        color: colors.ocean[500],
+    },
 });

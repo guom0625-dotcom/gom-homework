@@ -8,55 +8,35 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
 import { useAppStore, type CatalogItem } from '../../store/appStore';
-import { canAfford, GEM_VALUES, type GemKey, type GemInventory } from '../../lib/gems';
 import { Gem } from '../../components/Gem';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<StudentStackParams, 'Spend'> };
 
-const GEM_KEYS: GemKey[] = ['topaz', 'sapphire', 'emerald', 'ruby', 'amethyst'];
-
-function itemCost(item: CatalogItem): Partial<GemInventory> {
-    const cost: Partial<GemInventory> = {};
-    for (const g of GEM_KEYS) {
-        const v = item[`cost_${g}` as keyof CatalogItem] as number;
-        if (v > 0) cost[g] = v;
-    }
-    return cost;
-}
-
-function GemBalanceBar({ gems }: { gems: GemInventory }) {
+function GemBalanceBar({ diamonds }: { diamonds: number }) {
     return (
         <View style={styles.balanceBar}>
-            {GEM_KEYS.map(g => (
-                <View key={g} style={styles.balanceChip}>
-                    <Gem size={16} color={g} />
-                    <Text style={styles.balanceNum}>{gems[g]}</Text>
-                </View>
-            ))}
+            <View style={styles.balanceChip}>
+                <Gem size={16} />
+                <Text style={styles.balanceNum}>{diamonds}</Text>
+            </View>
         </View>
     );
 }
 
 function CostChips({ item }: { item: CatalogItem }) {
-    const chips = GEM_KEYS.filter(g => (item[`cost_${g}` as keyof CatalogItem] as number) > 0);
-    if (chips.length === 0) return <Text style={styles.freeBadge}>무료</Text>;
     return (
         <View style={styles.costRow}>
-            {chips.map(g => (
-                <View key={g} style={styles.costChip}>
-                    <Gem size={14} color={g} />
-                    <Text style={styles.costNum}>
-                        {item[`cost_${g}` as keyof CatalogItem] as number}
-                    </Text>
-                </View>
-            ))}
+            <View style={styles.costChip}>
+                <Gem size={14} />
+                <Text style={styles.costNum}>{item.cost}</Text>
+            </View>
         </View>
     );
 }
 
 export function SpendScreen({ navigation }: Props) {
-    const { gems, catalog, fetchCatalog, fetchMe, requestSpend } = useAppStore();
+    const { diamonds, catalog, fetchCatalog, fetchMe, requestSpend } = useAppStore();
     const [refreshing, setRefreshing] = useState(false);
     const [loadingId, setLoadingId] = useState<string | null>(null);
 
@@ -77,9 +57,8 @@ export function SpendScreen({ navigation }: Props) {
     }, []);
 
     const handleRequest = (item: CatalogItem) => {
-        const cost = itemCost(item);
-        if (!canAfford(gems, cost)) {
-            Alert.alert('보석이 부족해요', '할일을 더 완료해서 보석을 모아봐요!');
+        if (diamonds < item.cost) {
+            Alert.alert('다이아가 부족해요', '하루 할일을 모두 완료해서 다이아를 모아봐요!');
             return;
         }
         Alert.alert(
@@ -96,7 +75,7 @@ export function SpendScreen({ navigation }: Props) {
                             Alert.alert('요청 완료!', '매니저가 확인 후 승인해줄 거예요 🎉');
                         } catch (e: unknown) {
                             const msg = e instanceof Error ? e.message : '오류';
-                            Alert.alert('오류', msg === 'insufficient_gems' ? '보석이 부족해요' : msg);
+                            Alert.alert('오류', msg === 'insufficient_gems' ? '다이아가 부족해요' : msg);
                         } finally {
                             setLoadingId(null);
                         }
@@ -116,7 +95,7 @@ export function SpendScreen({ navigation }: Props) {
                 <View style={{ width: 36 }} />
             </View>
 
-            <GemBalanceBar gems={gems} />
+            <GemBalanceBar diamonds={diamonds} />
 
             <FlatList
                 data={catalog}
@@ -131,8 +110,7 @@ export function SpendScreen({ navigation }: Props) {
                     </View>
                 }
                 renderItem={({ item }) => {
-                    const cost = itemCost(item);
-                    const affordable = canAfford(gems, cost);
+                    const affordable = diamonds >= item.cost;
                     return (
                         <View style={[styles.card, !affordable && styles.cardDisabled]}>
                             <View style={styles.cardBody}>

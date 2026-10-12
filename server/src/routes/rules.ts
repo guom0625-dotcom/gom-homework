@@ -2,12 +2,11 @@ import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../db.ts';
 import type { AuthHandler } from '../index.ts';
-import { GEM_TYPES } from '../lib/gems.ts';
+import { GEM_TYPE } from '../lib/gems.ts';
 
 const RuleItem = z.object({
     student_id: z.string(),
     day_streak: z.number().int().positive(),
-    gem_type: z.enum(GEM_TYPES),
     gem_amount: z.number().int().positive(),
     active: z.boolean().default(true),
 });
@@ -50,7 +49,7 @@ export function registerRulesRoutes(app: FastifyInstance, db: Db, auth: AuthHand
                     INSERT INTO auto_reward_rules
                         (manager_id, student_id, day_streak, gem_type, gem_amount, active, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                `).run(req.user.id, r.student_id, r.day_streak, r.gem_type, r.gem_amount, r.active ? 1 : 0, now);
+                `).run(req.user.id, r.student_id, r.day_streak, GEM_TYPE, r.gem_amount, r.active ? 1 : 0, now);
             }
         });
         tx();

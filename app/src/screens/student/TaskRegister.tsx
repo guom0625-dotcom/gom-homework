@@ -8,6 +8,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
 import { useAppStore } from '../../store/appStore';
+import { formatDay } from '../../lib/days';
 import { colors, fontFamilies, fontSizes, radius } from '../../theme';
 
 type Props = {
@@ -45,7 +46,7 @@ export function TaskRegisterScreen({ navigation, route }: Props) {
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
                         <Text style={styles.backText}>✕</Text>
                     </TouchableOpacity>
-                    <Text style={styles.title}>Day {day} 할일 추가</Text>
+                    <Text style={styles.title}>{formatDay(day)} 할일 추가</Text>
                     <View style={{ width: 36 }} />
                 </View>
 

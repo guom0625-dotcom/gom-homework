@@ -1,27 +1,26 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
-import { gemsToPoints, EMPTY_INVENTORY, type GemInventory, type GemKey } from '../lib/gems';
 import type { CharacterType, DayStatus } from '../lib/types';
 
 export interface Task {
     id: string;
     student_id: string;
-    day: number;
+    day: number;  // KST 날짜 YYYYMMDD
     title: string;
     memo: string | null;
-    status: 'todo' | 'plan_submitted' | 'plan_approved' | 'plan_rejected' | 'submitted' | 'approved' | 'rejected';
-    gem_type: GemKey | null;
-    gem_amount: number | null;
+    status: 'todo' | 'plan_submitted' | 'plan_approved' | 'plan_rejected' | 'submitted' | 'approved' | 'rejected' | 'delete_requested';
+    prev_status: Task['status'] | null;
     submitted_at: number | null;
     reviewed_at: number | null;
     created_at: number;
 }
 
-export interface DayProgress {
-    student_id: string;
+// 할일이 있는 날짜의 요약 (GET /progress)
+export interface DaySummary {
     day: number;
-    status: 'todo' | 'pending' | 'approved' | 'complete';
-    updated_at: number;
+    total: number;
+    approved: number;
+    rewarded: number;
 }
 
 export interface CatalogItem {
@@ -29,11 +28,7 @@ export interface CatalogItem {
     manager_id: string;
     title: string;
     description: string | null;
-    cost_topaz: number;
-    cost_emerald: number;
-    cost_sapphire: number;
-    cost_ruby: number;
-    cost_amethyst: number;
+    cost: number;
     active: number;
     created_at: number;
 }
@@ -52,36 +47,23 @@ export interface SpendRequest {
 export interface StudentSummary {
     id: string;
     name: string;
-    topaz: number;
-    emerald: number;
-    sapphire: number;
-    ruby: number;
-    amethyst: number;
+    diamonds: number;
 }
 
 interface MeData {
     id: string;
     name: string;
     role: 'manager' | 'student';
-    gems?: GemInventory;
+    today: number;
+    diamonds?: number;
+    streak?: number;
     manager?: { id: string; name: string } | null;
     students?: { id: string; name: string }[];
     character?: string;
     avatar?: string | null;
 }
 
-function computeCurrentDay(progress: DayProgress[]): number {
-    const sorted = [...progress].sort((a, b) => a.day - b.day);
-    const active = sorted.find(d => d.status !== 'complete');
-    if (active) return active.day;
-    if (sorted.length > 0) return sorted[sorted.length - 1].day + 1;
-    return 1;
-}
-
-function computeDayStatus(tasks: Task[], dayProgress: DayProgress[], day: number): DayStatus {
-    const prog = dayProgress.find(d => d.day === day);
-    if (prog?.status === 'complete') return 'complete';
-    if (prog?.status === 'approved') return 'approved';
+function computeDayStatus(tasks: Task[]): DayStatus {
     if (tasks.length === 0) return 'todo';
     if (tasks.every(t => t.status === 'approved')) return 'approved';
     if (tasks.every(t => t.status === 'todo')) return 'todo';
@@ -90,12 +72,12 @@ function computeDayStatus(tasks: Task[], dayProgress: DayProgress[], day: number
 
 interface AppState {
     me: MeData | null;
-    tasks: Task[];
-    dayProgress: DayProgress[];
-    currentDay: number;
-    points: number;
-    gems: GemInventory;
-    dayStatus: DayStatus;
+    tasks: Task[];              // 지금 보고 있는 날짜의 할일
+    monthProgress: DaySummary[];
+    today: number;              // 서버 기준 오늘 (로딩 전 0)
+    streak: number;
+    diamonds: number;
+    dayStatus: DayStatus;       // 오늘의 상태
     character: CharacterType;
     avatar: string | null;
 
@@ -114,16 +96,18 @@ interface AppState {
     fetchTasks: (day: number) => Promise<void>;
     createTask: (day: number, title: string, memo?: string) => Promise<void>;
     submitTask: (id: string) => Promise<void>;
-    deleteTask: (id: string) => Promise<void>;
-    completeDay: (day: number) => Promise<void>;
+    requestDeleteTask: (id: string) => Promise<void>;
+    cancelDeleteTask: (id: string) => Promise<void>;
 
     fetchStudents: () => Promise<void>;
     fetchStudentTasks: (studentId: string, day?: number) => Promise<void>;
-    approveTask: (id: string, gemType: GemKey, gemAmount: number) => Promise<void>;
+    approveTask: (id: string) => Promise<void>;
     rejectTask: (id: string) => Promise<void>;
     submitPlan: (id: string) => Promise<void>;
     approvePlan: (id: string) => Promise<void>;
     rejectPlan: (id: string) => Promise<void>;
+    approveDelete: (id: string) => Promise<void>;
+    rejectDelete: (id: string) => Promise<void>;
 
     reset: () => void;
 }
@@ -131,10 +115,10 @@ interface AppState {
 const initialState = {
     me: null,
     tasks: [],
-    dayProgress: [],
-    currentDay: 1,
-    points: 0,
-    gems: { ...EMPTY_INVENTORY },
+    monthProgress: [] as DaySummary[],
+    today: 0,
+    streak: 0,
+    diamonds: 0,
     dayStatus: 'todo' as DayStatus,
     character: 'bear' as CharacterType,
     avatar: null as string | null,
@@ -143,29 +127,39 @@ const initialState = {
     selectedStudentTasks: [],
 };
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>((set, get) => {
+    // 오늘 날짜의 할일이 바뀐 경우에만 오늘 상태를 다시 계산
+    const withTasks = (tasks: Task[], day: number) =>
+        day === get().today ? { tasks, dayStatus: computeDayStatus(tasks) } : { tasks };
+
+    const patchTask = (id: string, status: Task['status'], prevStatus: Task['status'] | null = null) => {
+        const tasks = get().tasks.map(t =>
+            t.id === id ? { ...t, status, prev_status: prevStatus } : t
+        );
+        set(withTasks(tasks, tasks.find(t => t.id === id)?.day ?? 0));
+    };
+
+    return {
     ...initialState,
 
     fetchMe: async () => {
         const me = await api<MeData>('/me');
-        const gems = (me.gems ?? EMPTY_INVENTORY) as GemInventory;
         const character = (me.character as CharacterType | undefined) ?? 'bear';
         const avatar = me.avatar ?? null;
-        set({ me, gems, points: gemsToPoints(gems), character, avatar });
+        set({ me, today: me.today, diamonds: me.diamonds ?? 0, streak: me.streak ?? 0, character, avatar });
 
         if (me.role === 'student') {
-            const dayProgress = await api<DayProgress[]>('/progress');
-            const currentDay = computeCurrentDay(dayProgress);
-            const tasks = await api<Task[]>(`/tasks?day=${currentDay}`);
-            const dayStatus = computeDayStatus(tasks, dayProgress, currentDay);
-            set({ dayProgress, currentDay, tasks, dayStatus });
+            const [monthProgress, tasks] = await Promise.all([
+                api<DaySummary[]>(`/progress?month=${Math.floor(me.today / 100)}`),
+                api<Task[]>(`/tasks?day=${me.today}`),
+            ]);
+            set({ monthProgress, tasks, dayStatus: computeDayStatus(tasks) });
         }
     },
 
     fetchTasks: async (day) => {
         const tasks = await api<Task[]>(`/tasks?day=${day}`);
-        const { dayProgress } = get();
-        set({ tasks, dayStatus: computeDayStatus(tasks, dayProgress, day) });
+        set(withTasks(tasks, day));
     },
 
     createTask: async (day, title, memo) => {
@@ -173,25 +167,24 @@ export const useAppStore = create<AppState>((set, get) => ({
             method: 'POST',
             body: JSON.stringify({ day, title, memo }),
         });
-        const tasks = [...get().tasks, task];
-        const { dayProgress } = get();
-        set({ tasks, dayStatus: computeDayStatus(tasks, dayProgress, day) });
+        set(withTasks([...get().tasks, task], day));
     },
 
     submitTask: async (id) => {
         await api(`/tasks/${id}/submit`, { method: 'POST' });
-        const tasks = get().tasks.map(t =>
-            t.id === id ? { ...t, status: 'submitted' as const } : t
-        );
-        const { dayProgress, currentDay } = get();
-        set({ tasks, dayStatus: computeDayStatus(tasks, dayProgress, currentDay) });
+        patchTask(id, 'submitted');
     },
 
-    deleteTask: async (id) => {
-        await api(`/tasks/${id}`, { method: 'DELETE' });
-        const tasks = get().tasks.filter(t => t.id !== id);
-        const { dayProgress, currentDay } = get();
-        set({ tasks, dayStatus: computeDayStatus(tasks, dayProgress, currentDay) });
+    // 삭제는 매니저 승인 후에 실제로 지워진다
+    requestDeleteTask: async (id) => {
+        const prev = get().tasks.find(t => t.id === id)?.status ?? null;
+        await api(`/tasks/${id}/request-delete`, { method: 'POST' });
+        patchTask(id, 'delete_requested', prev);
+    },
+
+    cancelDeleteTask: async (id) => {
+        const res = await api<{ status: Task['status'] }>(`/tasks/${id}/cancel-delete`, { method: 'POST' });
+        patchTask(id, res.status);
     },
 
     updateProfile: async (character, avatar) => {
@@ -199,11 +192,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (avatar !== undefined) body.avatar = avatar;
         await api('/me', { method: 'PATCH', body: JSON.stringify(body) });
         set({ character, ...(avatar !== undefined ? { avatar } : {}) });
-    },
-
-    completeDay: async (day) => {
-        await api(`/day/${day}/complete`, { method: 'POST' });
-        await get().fetchMe();
     },
 
     fetchCatalog: async () => {
@@ -232,16 +220,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ selectedStudentTasks });
     },
 
-    approveTask: async (id, gemType, gemAmount) => {
-        await api(`/tasks/${id}/approve`, {
-            method: 'POST',
-            body: JSON.stringify({ gem_type: gemType, gem_amount: gemAmount }),
-        });
+    // 보상은 할일 단위가 아니라, 하루 할일이 전부 승인된 날에 대해 날짜가 바뀐 뒤 서버가 자동 지급
+    approveTask: async (id) => {
+        await api(`/tasks/${id}/approve`, { method: 'POST' });
         set(s => ({
             selectedStudentTasks: s.selectedStudentTasks.map(t =>
-                t.id === id
-                    ? { ...t, status: 'approved' as const, gem_type: gemType, gem_amount: gemAmount }
-                    : t
+                t.id === id ? { ...t, status: 'approved' as const } : t
             ),
         }));
     },
@@ -257,11 +241,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     submitPlan: async (id) => {
         await api(`/tasks/${id}/submit-plan`, { method: 'POST' });
-        const tasks = get().tasks.map(t =>
-            t.id === id ? { ...t, status: 'plan_submitted' as const } : t
-        );
-        const { dayProgress, currentDay } = get();
-        set({ tasks, dayStatus: computeDayStatus(tasks, dayProgress, currentDay) });
+        patchTask(id, 'plan_submitted');
     },
 
     approvePlan: async (id) => {
@@ -282,5 +262,20 @@ export const useAppStore = create<AppState>((set, get) => ({
         }));
     },
 
+    approveDelete: async (id) => {
+        await api(`/tasks/${id}/approve-delete`, { method: 'POST' });
+        set(s => ({ selectedStudentTasks: s.selectedStudentTasks.filter(t => t.id !== id) }));
+    },
+
+    rejectDelete: async (id) => {
+        const res = await api<{ status: Task['status'] }>(`/tasks/${id}/reject-delete`, { method: 'POST' });
+        set(s => ({
+            selectedStudentTasks: s.selectedStudentTasks.map(t =>
+                t.id === id ? { ...t, status: res.status, prev_status: null } : t
+            ),
+        }));
+    },
+
     reset: () => set(initialState),
-}));
+    };
+});
