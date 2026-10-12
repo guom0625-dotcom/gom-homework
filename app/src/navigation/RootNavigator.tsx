@@ -12,6 +12,7 @@ import { TaskListScreen } from '../screens/student/TaskList';
 import { TaskRegisterScreen } from '../screens/student/TaskRegister';
 import { DashboardScreen } from '../screens/manager/Dashboard';
 import { ApprovalScreen } from '../screens/manager/Approval';
+import { ManagerMenuScreen } from '../screens/manager/ManagerMenu';
 import { CatalogScreen } from '../screens/manager/CatalogScreen';
 import { SpendApprovalScreen } from '../screens/manager/SpendApprovalScreen';
 import { SpendScreen } from '../screens/student/SpendScreen';
@@ -35,6 +36,7 @@ export type StudentStackParams = {
 export type ManagerStackParams = {
     Dashboard: undefined;
     Approval: { studentId: string; studentName: string };
+    ManagerMenu: undefined;
     Catalog: undefined;
     SpendApproval: undefined;
 };
@@ -61,6 +63,7 @@ function ManagerNavigator() {
         <ManagerStack.Navigator screenOptions={{ headerShown: false }}>
             <ManagerStack.Screen name="Dashboard" component={DashboardScreen} />
             <ManagerStack.Screen name="Approval" component={ApprovalScreen} />
+            <ManagerStack.Screen name="ManagerMenu" component={ManagerMenuScreen} />
             <ManagerStack.Screen name="Catalog" component={CatalogScreen} />
             <ManagerStack.Screen name="SpendApproval" component={SpendApprovalScreen} />
         </ManagerStack.Navigator>

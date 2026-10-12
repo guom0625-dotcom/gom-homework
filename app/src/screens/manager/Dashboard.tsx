@@ -8,7 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { useAuthStore } from '../../store/authStore';
-import { useAppStore, type StudentSummary } from '../../store/appStore';
+import { useAppStore, type SpendRequest } from '../../store/appStore';
 import { api } from '../../api/client';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
@@ -19,8 +19,7 @@ export function DashboardScreen({ navigation }: Props) {
     const { students, fetchStudents } = useAppStore();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [pairingCode, setPairingCode] = useState<string | null>(null);
-    const [codeLoading, setCodeLoading] = useState(false);
+    const [pendingSpend, setPendingSpend] = useState(0);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState('');
 
@@ -28,34 +27,22 @@ export function DashboardScreen({ navigation }: Props) {
         fetchStudents().finally(() => setLoading(false));
     }, []);
 
+    // 관리 메뉴 안으로 들어간 보상 요청을 놓치지 않도록 대기 건수를 버튼에 표시
+    const fetchPendingSpend = useCallback(() =>
+        api<SpendRequest[]>('/spend-requests?status=pending')
+            .then(list => setPendingSpend(list.length))
+            .catch(() => {}), []);
+
     useFocusEffect(useCallback(() => {
         fetchStudents().catch(() => {});
+        fetchPendingSpend();
     }, []));
 
     const refresh = useCallback(async () => {
         setRefreshing(true);
-        await fetchStudents().catch(() => {});
+        await Promise.all([fetchStudents().catch(() => {}), fetchPendingSpend()]);
         setRefreshing(false);
     }, []);
-
-    const handleGenerateCode = async () => {
-        setCodeLoading(true);
-        try {
-            const res = await api<{ code: string; expires_in_seconds: number }>('/auth/pairing-code', {
-                method: 'POST',
-            });
-            setPairingCode(res.code);
-            Alert.alert(
-                '페어링 코드',
-                `코드: ${res.code}\n\n학생에게 이 코드를 알려주세요.\n5분 안에 입력해야 해요.`,
-                [{ text: '확인' }]
-            );
-        } catch {
-            Alert.alert('오류', '코드 생성에 실패했어요');
-        } finally {
-            setCodeLoading(false);
-        }
-    };
 
     const handleRename = async (id: string) => {
         const name = editingName.trim();
@@ -87,9 +74,19 @@ export function DashboardScreen({ navigation }: Props) {
                     <Text style={styles.greeting}>안녕하세요 👋</Text>
                     <Text style={styles.managerName}>{user?.name} 매니저</Text>
                 </View>
-                <TouchableOpacity onPress={() => { logout(); }} style={styles.logoutBtn}>
-                    <Text style={styles.logoutText}>로그아웃</Text>
-                </TouchableOpacity>
+                <View style={styles.headerActions}>
+                    <TouchableOpacity onPress={() => navigation.navigate('ManagerMenu')} style={styles.menuBtn}>
+                        <Text style={styles.menuText}>⚙️ 관리</Text>
+                        {pendingSpend > 0 && (
+                            <View style={styles.menuBadge}>
+                                <Text style={styles.menuBadgeText}>{pendingSpend}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => { logout(); }} style={styles.logoutBtn}>
+                        <Text style={styles.logoutText}>로그아웃</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <FlatList
@@ -97,38 +94,10 @@ export function DashboardScreen({ navigation }: Props) {
                 keyExtractor={s => s.id}
                 contentContainerStyle={styles.list}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-                ListHeaderComponent={
-                    <View style={styles.headerBtns}>
-                        <TouchableOpacity
-                            style={[styles.codeBtn, codeLoading && { opacity: 0.6 }]}
-                            onPress={handleGenerateCode}
-                            disabled={codeLoading}
-                        >
-                            {codeLoading
-                                ? <ActivityIndicator color={colors.ocean[700]} />
-                                : <Text style={styles.codeBtnText}>🔗 학생 초대 코드 생성</Text>
-                            }
-                        </TouchableOpacity>
-                        <View style={styles.mgmtRow}>
-                            <TouchableOpacity
-                                style={styles.mgmtBtn}
-                                onPress={() => navigation.navigate('Catalog')}
-                            >
-                                <Text style={styles.mgmtBtnText}>🎁 보상 카탈로그</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.mgmtBtn}
-                                onPress={() => navigation.navigate('SpendApproval')}
-                            >
-                                <Text style={styles.mgmtBtnText}>💎 보상 요청</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                }
                 ListEmptyComponent={
                     <View style={styles.empty}>
                         <Text style={styles.emptyText}>
-                            연결된 학생이 없어요{'\n'}초대 코드를 생성해서 학생과 연결해보세요
+                            연결된 학생이 없어요{'\n'}관리 메뉴에서 초대 코드를 생성해 학생과 연결해보세요
                         </Text>
                     </View>
                 }
@@ -207,6 +176,32 @@ const styles = StyleSheet.create({
         fontSize: fontSizes['3xl'],
         color: colors.ink[900],
     },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    menuBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        padding: 8,
+        borderRadius: radius.md,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.ink[200],
+    },
+    menuText: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.sm,
+        color: colors.ink[700],
+    },
+    menuBadge: {
+        minWidth: 18,
+        height: 18,
+        borderRadius: 9,
+        paddingHorizontal: 5,
+        backgroundColor: colors.coral[500],
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    menuBadgeText: { fontFamily: fontFamilies.bodyBold, fontSize: 10, color: '#fff' },
     logoutBtn: {
         padding: 8,
         borderRadius: radius.md,
@@ -219,35 +214,6 @@ const styles = StyleSheet.create({
         color: colors.ink[500],
     },
     list: { padding: 16, gap: 10 },
-    headerBtns: { gap: 8, marginBottom: 8 },
-    codeBtn: {
-        backgroundColor: colors.sky[100],
-        borderRadius: radius.md,
-        paddingVertical: 14,
-        alignItems: 'center',
-        borderWidth: 1.5,
-        borderColor: colors.sky[300],
-        borderStyle: 'dashed',
-    },
-    codeBtnText: {
-        fontFamily: fontFamilies.bodyMed,
-        fontSize: fontSizes.base,
-        color: colors.sky[700],
-    },
-    mgmtRow: { flexDirection: 'row', gap: 8 },
-    mgmtBtn: {
-        flex: 1,
-        backgroundColor: colors.card,
-        borderRadius: radius.md,
-        paddingVertical: 14,
-        alignItems: 'center',
-        ...shadows.card,
-    },
-    mgmtBtnText: {
-        fontFamily: fontFamilies.bodyMed,
-        fontSize: fontSizes.base,
-        color: colors.ink[700],
-    },
     empty: { paddingTop: 60, alignItems: 'center' },
     emptyText: {
         fontFamily: fontFamilies.body,

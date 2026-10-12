@@ -1,0 +1,159 @@
+import React, { useState, useCallback } from 'react';
+import {
+    View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Alert,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { ManagerStackParams } from '../../navigation/RootNavigator';
+import type { SpendRequest } from '../../store/appStore';
+import { api } from '../../api/client';
+import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
+
+type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'ManagerMenu'> };
+
+// 매니저 관리 메뉴 — 자주 쓰지 않는 기능(초대 코드, 보상 카탈로그, 보상 요청)을 대시보드에서 한 단계 안으로
+export function ManagerMenuScreen({ navigation }: Props) {
+    const [codeLoading, setCodeLoading] = useState(false);
+    const [pendingSpend, setPendingSpend] = useState(0);
+
+    useFocusEffect(useCallback(() => {
+        api<SpendRequest[]>('/spend-requests?status=pending')
+            .then(list => setPendingSpend(list.length))
+            .catch(() => {});
+    }, []));
+
+    const handleGenerateCode = async () => {
+        setCodeLoading(true);
+        try {
+            const res = await api<{ code: string; expires_in_seconds: number }>('/auth/pairing-code', {
+                method: 'POST',
+            });
+            Alert.alert(
+                '페어링 코드',
+                `코드: ${res.code}\n\n학생에게 이 코드를 알려주세요.\n5분 안에 입력해야 해요.`,
+                [{ text: '확인' }]
+            );
+        } catch {
+            Alert.alert('오류', '코드 생성에 실패했어요');
+        } finally {
+            setCodeLoading(false);
+        }
+    };
+
+    return (
+        <SafeAreaView style={styles.safe} edges={['top']}>
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+                    <Text style={styles.backText}>‹</Text>
+                </TouchableOpacity>
+                <Text style={styles.title}>관리</Text>
+                <View style={{ width: 36 }} />
+            </View>
+
+            <ScrollView contentContainerStyle={styles.list}>
+                <MenuItem
+                    icon="🎁"
+                    label="보상 카탈로그"
+                    desc="다이아로 바꿀 수 있는 보상 등록 · 수정"
+                    onPress={() => navigation.navigate('Catalog')}
+                />
+                <MenuItem
+                    icon="💎"
+                    label="보상 요청"
+                    desc="학생이 요청한 보상 승인 · 거절"
+                    badge={pendingSpend}
+                    onPress={() => navigation.navigate('SpendApproval')}
+                />
+                <MenuItem
+                    icon="🔗"
+                    label="학생 초대 코드 생성"
+                    desc="새 학생을 연결할 6자리 코드 (5분 유효)"
+                    loading={codeLoading}
+                    onPress={handleGenerateCode}
+                />
+            </ScrollView>
+        </SafeAreaView>
+    );
+}
+
+function MenuItem({ icon, label, desc, badge = 0, loading = false, onPress }: {
+    icon: string;
+    label: string;
+    desc: string;
+    badge?: number;
+    loading?: boolean;
+    onPress: () => void;
+}) {
+    return (
+        <TouchableOpacity style={styles.item} onPress={onPress} disabled={loading} activeOpacity={0.75}>
+            <Text style={styles.itemIcon}>{icon}</Text>
+            <View style={styles.itemBody}>
+                <Text style={styles.itemLabel}>{label}</Text>
+                <Text style={styles.itemDesc}>{desc}</Text>
+            </View>
+            {loading
+                ? <ActivityIndicator color={colors.ocean[500]} />
+                : badge > 0
+                    ? <View style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View>
+                    : <Text style={styles.chevron}>›</Text>
+            }
+        </TouchableOpacity>
+    );
+}
+
+const styles = StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.paper },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.ink[100],
+    },
+    backBtn: { padding: 4, width: 36 },
+    backText: { fontSize: 28, color: colors.ink[700], lineHeight: 32 },
+    title: {
+        flex: 1,
+        fontFamily: fontFamilies.display,
+        fontSize: fontSizes['2xl'],
+        color: colors.ink[900],
+        textAlign: 'center',
+    },
+    list: { padding: 16, gap: 10 },
+    item: {
+        backgroundColor: colors.card,
+        borderRadius: radius.md,
+        padding: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+        ...shadows.card,
+    },
+    itemIcon: { fontSize: 24 },
+    itemBody: { flex: 1 },
+    itemLabel: {
+        fontFamily: fontFamilies.bodyBold,
+        fontSize: fontSizes.base,
+        color: colors.ink[900],
+    },
+    itemDesc: {
+        fontFamily: fontFamilies.body,
+        fontSize: fontSizes.sm,
+        color: colors.ink[500],
+        marginTop: 2,
+    },
+    chevron: { fontSize: 22, color: colors.ink[300], paddingHorizontal: 4 },
+    badge: {
+        minWidth: 22,
+        height: 22,
+        borderRadius: 11,
+        paddingHorizontal: 6,
+        backgroundColor: colors.coral[500],
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    badgeText: { fontFamily: fontFamilies.bodyBold, fontSize: fontSizes.xs, color: '#fff' },
+});
