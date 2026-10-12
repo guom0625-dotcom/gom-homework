@@ -18,7 +18,3 @@ export function isValidDay(day: number): boolean {
 export function prevDay(day: number): number {
     return todayKST(toUTC(day) - KST_OFFSET_MS - DAY_MS);
 }
-
-export function msUntilNextKSTMidnight(now: number = Date.now()): number {
-    return DAY_MS - ((now + KST_OFFSET_MS) % DAY_MS);
-}

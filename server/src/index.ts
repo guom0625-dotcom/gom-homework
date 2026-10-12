@@ -15,7 +15,7 @@ import { registerCatalogRoutes } from './routes/catalog.ts';
 import { registerSpendRoutes } from './routes/spendRequests.ts';
 import { registerStudentRoutes } from './routes/students.ts';
 import { DAY_REWARD, settlePastDays } from './lib/gems.ts';
-import { msUntilNextKSTMidnight } from './lib/days.ts';
+import { todayKST } from './lib/days.ts';
 import { sendPush } from './lib/push.ts';
 
 export type AuthHandler = ReturnType<typeof makeAuth>;
@@ -32,22 +32,16 @@ app.decorateRequest('user', null as unknown as import('./auth.ts').AuthUser);
 
 const auth = makeAuth(db);
 
-registerAuthRoutes(app, db, auth);
-registerMeRoutes(app, db, auth);
-registerTaskRoutes(app, db, auth);
-registerRulesRoutes(app, db, auth);
-registerCatalogRoutes(app, db, auth);
-registerSpendRoutes(app, db, auth);
-registerStudentRoutes(app, db, auth);
-
-app.get('/health', async () => ({ ok: true, time: Date.now() }));
-
-// 하루 보상 정산: 서버 시작 시 한 번, 이후 매일 KST 자정 직후.
-// 전날 할일이 전부 승인된 학생에게 다이아 지급.
-let settleTimer: NodeJS.Timeout;
-const runSettlement = () => {
+// 하루 보상 정산: 전날 할일이 전부 승인된 학생에게 다이아 지급.
+// 서버가 폰에서 돌아 기기가 절전에 들어가면 타이머가 멈추므로 "자정에 한 번 울리는 타이머"는 믿을 수 없다.
+// 대신 날짜(KST)가 바뀌었는지를 짧은 주기와 모든 요청에서 벽시계 기준으로 확인해, 바뀌었으면 그때 정산한다.
+let settledDay = 0;
+const settleIfDayChanged = () => {
+    const today = todayKST();
+    if (today === settledDay) return;
     try {
         const rewarded = settlePastDays(db);
+        settledDay = today;
         if (rewarded.length > 0) app.log.info({ rewarded }, 'day rewards settled');
         for (const { studentId } of rewarded) {
             const student = db.prepare('SELECT push_token FROM users WHERE id = ?').get(studentId) as
@@ -61,13 +55,24 @@ const runSettlement = () => {
     } catch (err) {
         app.log.error(err, 'day settlement failed');
     }
-    settleTimer = setTimeout(runSettlement, msUntilNextKSTMidnight() + 5_000);
 };
-runSettlement();
+settleIfDayChanged();
+const settleTimer = setInterval(settleIfDayChanged, 60_000);
+app.addHook('onRequest', async () => { settleIfDayChanged(); });
+
+registerAuthRoutes(app, db, auth);
+registerMeRoutes(app, db, auth);
+registerTaskRoutes(app, db, auth);
+registerRulesRoutes(app, db, auth);
+registerCatalogRoutes(app, db, auth);
+registerSpendRoutes(app, db, auth);
+registerStudentRoutes(app, db, auth);
+
+app.get('/health', async () => ({ ok: true, time: Date.now() }));
 
 const shutdown = async (signal: string) => {
     app.log.info({ signal }, 'shutting down');
-    clearTimeout(settleTimer);
+    clearInterval(settleTimer);
     await app.close();
     db.close();
     process.exit(0);
