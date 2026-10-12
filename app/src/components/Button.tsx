@@ -11,6 +11,8 @@ interface ButtonProps {
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
   disabled?: boolean;
+  /** 좁은 아이콘 버튼용 — 좌우 패딩 없이 내용만 가운데 정렬 */
+  compact?: boolean;
 }
 
 export function Button({
@@ -22,11 +24,12 @@ export function Button({
   style,
   textStyle,
   disabled = false,
+  compact = false,
 }: ButtonProps) {
   const { bg, shadow, text } = buttonColors[variant];
 
-  const padV = size === 'lg' ? 18 : size === 'sm' ? 10 : 14;
-  const padH = size === 'lg' ? 28 : size === 'sm' ? 16 : 24;
+  const padV = compact ? 7 : size === 'lg' ? 18 : size === 'sm' ? 10 : 14;
+  const padH = compact ? 0 : size === 'lg' ? 28 : size === 'sm' ? 16 : 24;
   const fontSize = size === 'lg' ? fontSizes.xl : size === 'sm' ? fontSizes.md : fontSizes.lg;
 
   return (

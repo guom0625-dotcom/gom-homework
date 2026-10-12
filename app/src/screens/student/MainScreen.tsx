@@ -36,6 +36,20 @@ const ACTION_LABEL: Record<DayStatus, string> = {
   approved: '오늘 할일 완료! 🎉',
 };
 
+// 하단 양옆의 작은 버튼 — 이모지 + 이름
+function SideButton({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }) {
+  return (
+    <View style={styles.sideBtn}>
+      <Button variant="ghost" compact style={styles.squareBtn} onPress={onPress}>
+        <View style={styles.sideBtnInner}>
+          <Text style={styles.sideBtnIcon}>{icon}</Text>
+          <Text style={styles.sideBtnLabel}>{label}</Text>
+        </View>
+      </Button>
+    </View>
+  );
+}
+
 export function MainScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<StudentStackParams>>();
   const { width } = useWindowDimensions();
@@ -188,15 +202,7 @@ export function MainScreen() {
           <StatusBanner status={dayStatus} />
 
           <View style={styles.actionRow}>
-            <View style={styles.sideBtn}>
-              <Button
-                variant="ghost"
-                size="md"
-                label="📋"
-                style={styles.squareBtn}
-                onPress={() => navigation.navigate('TaskList', { day: today })}
-              />
-            </View>
+            <SideButton icon="📋" label="목록" onPress={() => navigation.navigate('TaskList', { day: today })} />
 
             <View style={{ flex: 1 }}>
               <Button
@@ -208,25 +214,9 @@ export function MainScreen() {
               />
             </View>
 
-            <View style={styles.sideBtn}>
-              <Button
-                variant="ghost"
-                size="md"
-                label="💎"
-                style={styles.squareBtn}
-                onPress={() => navigation.navigate('Spend')}
-              />
-            </View>
+            <SideButton icon="💎" label="상점" onPress={() => navigation.navigate('Spend')} />
 
-            <View style={styles.sideBtn}>
-              <Button
-                variant="ghost"
-                size="md"
-                label="⚙️"
-                style={styles.squareBtn}
-                onPress={() => navigation.navigate('Profile')}
-              />
-            </View>
+            <SideButton icon="⚙️" label="설정" onPress={() => navigation.navigate('Profile')} />
           </View>
         </View>
       </LinearGradient>
@@ -299,7 +289,15 @@ const styles = StyleSheet.create({
     marginTop: 10,
     alignItems: 'center',
   },
-  sideBtn: { width: 52 },
+  sideBtn: { width: 54 },
+  sideBtnInner: { alignItems: 'center' },
+  sideBtnIcon: { fontSize: 18, lineHeight: 22 },
+  sideBtnLabel: {
+    fontFamily: fontFamilies.bodyMed,
+    fontSize: 10,
+    lineHeight: 14,
+    color: colors.ink[700],
+  },
   squareBtn: { alignSelf: 'stretch' },
   fullBtn: { alignSelf: 'stretch' },
 });
