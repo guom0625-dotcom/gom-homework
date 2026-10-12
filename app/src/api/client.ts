@@ -1,4 +1,4 @@
-const DEFAULT_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.1.101:3100';
+const DEFAULT_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.1.225:3100';
 
 let _base = DEFAULT_BASE;
 let _key: string | null = null;

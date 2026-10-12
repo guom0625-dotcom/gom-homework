@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import NetInfo from '@react-native-community/netinfo';
 import { setApiBase } from '../api/client';
 
-const INTERNAL_URL = process.env.EXPO_PUBLIC_API_URL_INTERNAL ?? 'http://192.168.1.101:3100';
+const INTERNAL_URL = process.env.EXPO_PUBLIC_API_URL_INTERNAL ?? 'http://192.168.1.225:3100';
 const EXTERNAL_URL = process.env.EXPO_PUBLIC_API_URL_EXTERNAL ?? 'https://guom0625.duckdns.org/hw';
 const HOME_SSID    = process.env.EXPO_PUBLIC_HOME_SSID ?? '';
 

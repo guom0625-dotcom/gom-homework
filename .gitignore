@@ -12,7 +12,8 @@ app/ios/
 *.ipa
 
 # ── Server (Phase 2) ──────────────────────────
-server/data/        # SQLite 파일
+# SQLite 파일
+server/data/
 server/logs/
 server/.env
 # firebase-admin 크리덴셜 등 비밀 JSON
