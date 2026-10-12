@@ -15,10 +15,11 @@ const PatchBody = z.object({
 
 export function registerMeRoutes(app: FastifyInstance, db: Db, auth: AuthHandler): void {
     app.get('/me', { preHandler: auth }, async (req) => {
-        const user = db.prepare('SELECT id, name, role, push_token, character, avatar FROM users WHERE id = ?')
-            .get(req.user.id) as { id: string; name: string; role: string; push_token: string | null; character: string; avatar: string | null };
+        const user = db.prepare('SELECT id, name, role, push_token, character, avatar, created_at FROM users WHERE id = ?')
+            .get(req.user.id) as { id: string; name: string; role: string; push_token: string | null; character: string; avatar: string | null; created_at: number };
 
-        const result: Record<string, unknown> = { ...user, today: todayKST() };
+        const { created_at, ...profile } = user;
+        const result: Record<string, unknown> = { ...profile, today: todayKST(), joined_day: todayKST(created_at) };
 
         if (user.role === 'student') {
             const balance = db.prepare('SELECT diamond FROM gems_balance WHERE student_id = ?')

@@ -22,13 +22,16 @@ import type { StudentStackParams } from '../../navigation/RootNavigator';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 
-// 이번 달 섬 지도 — 한 줄에 COLS개씩, 줄마다 방향을 바꿔 'ㄹ'자로 이어진다
+// 이번 달 섬 지도 — 한 줄에 COLS개씩 비스듬히 내려가다 끝에서 방향을 바꾸는 굽이길
 const COLS = 4;
 const TILE = 76;
+const TILE_H = 90;
 const PAD_X = 22;
-const PAD_TOP = 14;
-const ROW_STEP = 118;
-const PATH_Y = 62;  // 타일 상단 → 섬 중심까지
+const PAD_TOP = 18;
+const SLOPE = 24;                         // 한 칸 옆으로 갈 때마다 내려가는 높이
+const WOBBLE = 8;                         // 섬마다 조금씩 어긋나는 정도
+const ROW_STEP = (COLS - 1) * SLOPE + 112;
+const PATH_Y = 62;                        // 타일 상단 → 섬 중심까지
 
 const ACTION_LABEL: Record<DayStatus, string> = {
   todo:     '오늘의 할일 등록',
@@ -54,7 +57,7 @@ export function MainScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<StudentStackParams>>();
   const { width } = useWindowDimensions();
   const { user } = useAuthStore();
-  const { today, dayStatus, diamonds, streak, monthProgress, character, avatar, fetchMe } = useAppStore();
+  const { today, joinedDay, dayStatus, diamonds, streak, monthProgress, character, avatar, fetchMe } = useAppStore();
 
   // 화면 포커스 시 데이터 갱신 + 포커스 유지 중 30초 폴링
   useFocusEffect(useCallback(() => {
@@ -82,36 +85,61 @@ export function MainScreen() {
   );
 
   const rows = Math.ceil(days.length / COLS);
-  const mapHeight = PAD_TOP + rows * ROW_STEP + 12;
+  const mapHeight = PAD_TOP + (rows - 1) * ROW_STEP + (COLS - 1) * SLOPE + WOBBLE + TILE_H + 20;
   const colStep = (width - PAD_X * 2 - TILE) / (COLS - 1);
+  const wobbleX = Math.max(0, Math.min(WOBBLE, (colStep - TILE) / 2 - 1));
 
+  // 타일 좌상단 좌표. 줄마다 좌↔우로 방향을 바꾸며 계속 아래로 내려간다
   const islandPos = (i: number) => {
     const row = Math.floor(i / COLS);
     const pos = i % COLS;
     const col = row % 2 === 0 ? pos : COLS - 1 - pos;
-    return { x: PAD_X + col * colStep, y: PAD_TOP + row * ROW_STEP };
+    return {
+      x: PAD_X + col * colStep + Math.sin(i * 1.7) * wobbleX,
+      y: PAD_TOP + row * ROW_STEP + pos * SLOPE + Math.cos(i * 2.3) * WOBBLE,
+    };
   };
 
-  const pathD = days
-    .map((_, i) => {
+  // 섬 중심을 부드럽게 잇는 곡선 (Catmull-Rom → 베지어)
+  const pathD = useMemo(() => {
+    const pts = days.map((_, i) => {
       const { x, y } = islandPos(i);
-      return `${i === 0 ? 'M' : 'L'} ${x + TILE / 2} ${y + PATH_Y}`;
-    })
-    .join(' ');
+      return { x: x + TILE / 2, y: y + PATH_Y };
+    });
+    if (pts.length === 0) return '';
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+      d += ` C ${p1.x + (p2.x - p0.x) / 6} ${p1.y + (p2.y - p0.y) / 6},`
+        + ` ${p2.x - (p3.x - p1.x) / 6} ${p2.y - (p3.y - p1.y) / 6}, ${p2.x} ${p2.y}`;
+    }
+    return d;
+  }, [days, width]);
+
+  // 길이 비껴가는 빈 바다(줄이 시작되는 쪽 아래)에 잔물결
+  const waves = useMemo(() => {
+    const list: { x: number; y: number }[] = [];
+    for (let row = 0; row < rows - 1; row++) {
+      const x = row % 2 === 0 ? PAD_X + TILE / 2 : width - PAD_X - TILE / 2;
+      list.push({ x, y: PAD_TOP + row * ROW_STEP + ROW_STEP / 2 + TILE_H / 2 + SLOPE });
+    }
+    return list;
+  }, [rows, width]);
 
   const islandState = (day: number): IslandState =>
     day > today ? 'locked'
     : day === today ? 'current'
     : doneDays.has(day) ? 'complete'
-    : 'pending';
+    : day < joinedDay ? 'pending'
+    : 'missed';
 
-  // 오늘 섬이 보이도록 스크롤 (오늘 줄의 한 줄 위부터)
+  // 오늘 섬이 보이도록 스크롤
   const scrollRef = useRef<ScrollView>(null);
   const scrollToToday = useCallback(() => {
     if (!today) return;
-    const row = Math.floor((dayParts(today).d - 1) / COLS);
-    scrollRef.current?.scrollTo({ y: Math.max(0, PAD_TOP + (row - 1) * ROW_STEP), animated: false });
-  }, [today]);
+    const { y } = islandPos(dayParts(today).d - 1);
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 150), animated: false });
+  }, [today, width]);
   useEffect(scrollToToday, [scrollToToday]);
 
   const handleMainAction = () => {
@@ -167,6 +195,16 @@ export function MainScreen() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
+              {waves.map((w, i) => (
+                <Path
+                  key={i}
+                  d={`M ${w.x - 20} ${w.y} q 5 -6 10 0 t 10 0 t 10 0 t 10 0 M ${w.x - 8} ${w.y + 12} q 5 -6 10 0 t 10 0 t 10 0`}
+                  stroke="rgba(255,255,255,0.4)"
+                  strokeWidth="2.5"
+                  fill="none"
+                  strokeLinecap="round"
+                />
+              ))}
             </Svg>
 
             {days.map((day, i) => {

@@ -9,6 +9,7 @@ const BASE_COLORS: Record<IslandState, { top: string; mid: string; base: string 
   current:  { top: '#ffe48a', mid: '#ffc83a', base: '#c98c00' },
   complete: { top: '#a8d8b9', mid: '#7ec8a0', base: '#4d9670' },
   locked:   { top: '#cdd2dd', mid: '#9aa1b3', base: '#6b7488' },
+  missed:   { top: '#8d8578', mid: '#6a6358', base: '#45403a' },
 };
 
 interface IslandTileProps {
@@ -53,6 +54,20 @@ export function IslandTile({ state = 'pending', label, size = 84, character, gem
         {state === 'current' && character}
 
         {state === 'complete' && gem}
+
+        {state === 'missed' && (
+          <Svg width="44" height="40" viewBox="0 0 44 40">
+            {/* 먹구름 */}
+            <Circle cx="13" cy="15" r="8"  fill="#4a5060" />
+            <Circle cx="23" cy="11" r="10" fill="#565d6e" />
+            <Circle cx="33" cy="16" r="7"  fill="#4a5060" />
+            <Rect x="8" y="14" width="29" height="9" rx="4.5" fill="#4a5060" />
+            {/* 번개 */}
+            <Path d="M23 21 L17 31 H22 L19 39 L29 27 H24 L27 21 Z" fill={colors.sun[500]} stroke="#c98c00" strokeWidth="0.8" strokeLinejoin="round" />
+            {/* 빗줄기 */}
+            <Path d="M11 26 L9 32 M33 26 L31 32" stroke="#cfe6ff" strokeWidth="2" strokeLinecap="round" />
+          </Svg>
+        )}
 
         {state === 'pending' && (
           <View style={styles.pendingCircle} />

@@ -55,6 +55,7 @@ interface MeData {
     name: string;
     role: 'manager' | 'student';
     today: number;
+    joined_day?: number;
     diamonds?: number;
     streak?: number;
     manager?: { id: string; name: string } | null;
@@ -75,6 +76,7 @@ interface AppState {
     tasks: Task[];              // 지금 보고 있는 날짜의 할일
     monthProgress: DaySummary[];
     today: number;              // 서버 기준 오늘 (로딩 전 0)
+    joinedDay: number;          // 가입한 날짜
     streak: number;
     diamonds: number;
     dayStatus: DayStatus;       // 오늘의 상태
@@ -117,6 +119,7 @@ const initialState = {
     tasks: [],
     monthProgress: [] as DaySummary[],
     today: 0,
+    joinedDay: 0,
     streak: 0,
     diamonds: 0,
     dayStatus: 'todo' as DayStatus,
@@ -146,7 +149,7 @@ export const useAppStore = create<AppState>((set, get) => {
         const me = await api<MeData>('/me');
         const character = (me.character as CharacterType | undefined) ?? 'bear';
         const avatar = me.avatar ?? null;
-        set({ me, today: me.today, diamonds: me.diamonds ?? 0, streak: me.streak ?? 0, character, avatar });
+        set({ me, today: me.today, joinedDay: me.joined_day ?? 0, diamonds: me.diamonds ?? 0, streak: me.streak ?? 0, character, avatar });
 
         if (me.role === 'student') {
             const [monthProgress, tasks] = await Promise.all([
