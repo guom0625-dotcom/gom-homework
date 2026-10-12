@@ -164,6 +164,22 @@ git push origin v1.0.0
 
 ---
 
+## 푸시 알림 (알림바)
+
+학생 ↔ 매니저 사이의 일(할일 등록, 계획/완료 상신, 승인/반려, 삭제 요청, 보상 요청, 다이아 지급,
+매니저의 "할일 등록 알림")은 서버가 FCM으로 직접 푸시를 보낸다. Firebase 프로젝트가 필요하다 (무료).
+
+1. [Firebase 콘솔](https://console.firebase.google.com)에서 프로젝트 생성 → Android 앱 추가
+   (패키지 이름 `com.guom0625.gomhomework`) → `google-services.json` 내려받기
+2. 앱 빌드용: `base64 -w 0 google-services.json` 값을 GitHub Secret `GOOGLE_SERVICES_JSON_BASE64` 로 등록
+   → 이후 빌드부터 앱이 알림 토큰을 서버에 등록한다
+3. 서버용: 프로젝트 설정 → 서비스 계정 → "새 비공개 키 생성" → 받은 JSON을
+   `server/fcm-credentials.json` 으로 저장 (경로는 `FCM_CREDENTIALS` 로 변경 가능) → 서버 재시작
+
+두 파일 모두 커밋 금지(.gitignore 처리됨). 설정이 없으면 앱과 서버는 알림 없이 그대로 동작한다.
+
+---
+
 ## API 엔드포인트
 
 Base URL: `http://<서버-IP>:3100`
@@ -198,7 +214,8 @@ Base URL: `http://<서버-IP>:3100`
 
 | Method | Path | 설명 |
 |---|---|---|
-| `GET` | `/students` | 연결된 학생 목록 + 다이아 잔고 |
+| `GET` | `/students` | 연결된 학생 목록 + 다이아 잔고 + 오늘 할일 수 |
+| `POST` | `/students/:id/nudge` | 오늘 할일 미등록 학생에게 등록 알림 푸시 |
 | `GET` | `/students/:id/progress?month=YYYYMM` | 특정 학생의 월별 날짜 현황 |
 | `GET` | `/tasks?student_id=xxx` | 특정 학생 할일 목록 |
 | `POST` | `/tasks/:id/approve` | 할일 완료 승인 |

@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import { useAppStore } from '../store/appStore';
 import { useServerUrl } from '../hooks/useServerUrl';
+import { usePushRegistration } from '../hooks/usePushRegistration';
 import { WelcomeScreen } from '../screens/auth/WelcomeScreen';
 import { PairingScreen } from '../screens/auth/PairingScreen';
 import { MainScreen } from '../screens/student/MainScreen';
@@ -74,6 +75,7 @@ export function RootNavigator() {
     useServerUrl();
     const { user, isLoading, init, needsPairing } = useAuthStore();
     const { fetchMe, reset } = useAppStore();
+    usePushRegistration(user?.id);
 
     useEffect(() => { init(); }, []);
 

@@ -32,3 +32,7 @@ Thumbs.db
 *.jks
 *.keystore
 server/bearer_key
+
+# Firebase 설정 (푸시 알림) — CI 시크릿으로 주입, 커밋 금지
+app/google-services.json
+server/fcm-credentials.json

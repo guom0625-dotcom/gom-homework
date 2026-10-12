@@ -73,6 +73,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     },
 
     logout: async () => {
+        // 로그아웃한 기기로 알림이 계속 가지 않도록 토큰 해제
+        await api('/me', { method: 'PATCH', body: JSON.stringify({ push_token: null }) }).catch(() => {});
         await SecureStore.deleteItemAsync(STORE_KEY).catch(() => {});
         setApiKey(null);
         set({ user: null, key: null, needsPairing: false });

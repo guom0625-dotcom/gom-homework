@@ -22,6 +22,7 @@ export function DashboardScreen({ navigation }: Props) {
     const [pendingSpend, setPendingSpend] = useState(0);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState('');
+    const [nudgingId, setNudgingId] = useState<string | null>(null);
 
     useEffect(() => {
         fetchStudents().finally(() => setLoading(false));
@@ -43,6 +44,26 @@ export function DashboardScreen({ navigation }: Props) {
         await Promise.all([fetchStudents().catch(() => {}), fetchPendingSpend()]);
         setRefreshing(false);
     }, []);
+
+    // 오늘 할일을 아직 등록하지 않은 학생에게 등록하라고 알림 보내기
+    const handleNudge = async (id: string, name: string) => {
+        setNudgingId(id);
+        try {
+            const res = await api<{ delivered: boolean }>(`/students/${id}/nudge`, { method: 'POST' });
+            Alert.alert(
+                res.delivered ? '알림을 보냈어요' : '알림을 보내지 못했어요',
+                res.delivered
+                    ? `${name}에게 할일을 등록하라고 알렸어요`
+                    : `${name}의 폰에 알림이 아직 설정되지 않았어요`,
+            );
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : '';
+            if (msg === 'already_registered') await fetchStudents().catch(() => {});
+            Alert.alert('오류', msg === 'already_registered' ? '이미 할일을 등록했어요' : '알림 전송에 실패했어요');
+        } finally {
+            setNudgingId(null);
+        }
+    };
 
     const handleRename = async (id: string) => {
         const name = editingName.trim();
@@ -135,7 +156,23 @@ export function DashboardScreen({ navigation }: Props) {
                                     <Text style={styles.studentName}>{item.name}</Text>
                                     <Text style={styles.studentPoints}>
                                         💎 {item.diamonds.toLocaleString()}개
+                                        {item.pending_review > 0 ? ` · ⏳ 검토 대기 ${item.pending_review}개` : ''}
                                     </Text>
+                                    {item.today_total === 0 && (
+                                        <View style={styles.nudgeRow}>
+                                            <Text style={styles.nudgeText}>오늘 할일 미등록</Text>
+                                            <TouchableOpacity
+                                                style={styles.nudgeBtn}
+                                                onPress={() => handleNudge(item.id, item.name)}
+                                                disabled={nudgingId === item.id}
+                                            >
+                                                {nudgingId === item.id
+                                                    ? <ActivityIndicator size="small" color={colors.coral[700]} />
+                                                    : <Text style={styles.nudgeBtnText}>📣 등록 알림</Text>
+                                                }
+                                            </TouchableOpacity>
+                                        </View>
+                                    )}
                                 </>
                             )}
                         </View>
@@ -255,6 +292,25 @@ const styles = StyleSheet.create({
         fontSize: fontSizes.sm,
         color: colors.ink[500],
         marginTop: 2,
+    },
+    nudgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+    nudgeText: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.sm,
+        color: colors.coral[700],
+    },
+    nudgeBtn: {
+        backgroundColor: '#ffe9e4',
+        borderRadius: radius.pill,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        minWidth: 84,
+        alignItems: 'center',
+    },
+    nudgeBtnText: {
+        fontFamily: fontFamilies.bodyBold,
+        fontSize: fontSizes.xs,
+        color: colors.coral[700],
     },
     chevron: {
         fontSize: 22,
