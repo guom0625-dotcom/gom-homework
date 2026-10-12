@@ -12,7 +12,7 @@ export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHa
         if (req.user.role !== 'manager') return reply.code(403).send({ error: 'forbidden' });
 
         const students = db.prepare(`
-            SELECT u.id, u.name,
+            SELECT u.id, u.name, u.character, u.avatar,
                    COALESCE(gb.diamond, 0) AS diamonds,
                    (SELECT COUNT(*) FROM tasks t WHERE t.student_id = u.id AND t.day = ?) AS today_total,
                    (SELECT COUNT(*) FROM tasks t WHERE t.student_id = u.id

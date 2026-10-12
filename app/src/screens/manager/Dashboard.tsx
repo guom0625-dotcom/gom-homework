@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { useAuthStore } from '../../store/authStore';
+import { Character } from '../../components/Character';
 import { useAppStore, type SpendRequest } from '../../store/appStore';
 import { api } from '../../api/client';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
@@ -15,7 +16,7 @@ import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'Dashboard'> };
 
 export function DashboardScreen({ navigation }: Props) {
-    const { user, logout } = useAuthStore();
+    const { user } = useAuthStore();
     const { students, fetchStudents } = useAppStore();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -95,19 +96,14 @@ export function DashboardScreen({ navigation }: Props) {
                     <Text style={styles.greeting}>안녕하세요 👋</Text>
                     <Text style={styles.managerName}>{user?.name} 매니저</Text>
                 </View>
-                <View style={styles.headerActions}>
-                    <TouchableOpacity onPress={() => navigation.navigate('ManagerMenu')} style={styles.menuBtn}>
-                        <Text style={styles.menuText}>⚙️ 관리</Text>
-                        {pendingSpend > 0 && (
-                            <View style={styles.menuBadge}>
-                                <Text style={styles.menuBadgeText}>{pendingSpend}</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => { logout(); }} style={styles.logoutBtn}>
-                        <Text style={styles.logoutText}>로그아웃</Text>
-                    </TouchableOpacity>
-                </View>
+                <TouchableOpacity onPress={() => navigation.navigate('ManagerMenu')} style={styles.menuBtn}>
+                    <Text style={styles.menuText}>⚙️ 관리</Text>
+                    {pendingSpend > 0 && (
+                        <View style={styles.menuBadge}>
+                            <Text style={styles.menuBadgeText}>{pendingSpend}</Text>
+                        </View>
+                    )}
+                </TouchableOpacity>
             </View>
 
             <FlatList
@@ -131,7 +127,7 @@ export function DashboardScreen({ navigation }: Props) {
                                 setEditingName(item.name);
                             }}
                         >
-                            <Text style={styles.avatarText}>{item.name[0]}</Text>
+                            <Character type={item.character} size={44} mood="happy" photoUrl={item.avatar ?? undefined} />
                         </TouchableOpacity>
                         <View style={styles.studentInfo}>
                             {editingId === item.id ? (
@@ -213,7 +209,6 @@ const styles = StyleSheet.create({
         fontSize: fontSizes['3xl'],
         color: colors.ink[900],
     },
-    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     menuBtn: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -239,17 +234,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     menuBadgeText: { fontFamily: fontFamilies.bodyBold, fontSize: 10, color: '#fff' },
-    logoutBtn: {
-        padding: 8,
-        borderRadius: radius.md,
-        borderWidth: 1,
-        borderColor: colors.ink[200],
-    },
-    logoutText: {
-        fontFamily: fontFamilies.body,
-        fontSize: fontSizes.sm,
-        color: colors.ink[500],
-    },
     list: { padding: 16, gap: 10 },
     empty: { paddingTop: 60, alignItems: 'center' },
     emptyText: {
@@ -271,15 +255,8 @@ const styles = StyleSheet.create({
     studentAvatar: {
         width: 44,
         height: 44,
-        borderRadius: 22,
-        backgroundColor: colors.ocean[100],
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    avatarText: {
-        fontFamily: fontFamilies.display,
-        fontSize: fontSizes.xl,
-        color: colors.ocean[700],
     },
     studentInfo: { flex: 1 },
     studentName: {

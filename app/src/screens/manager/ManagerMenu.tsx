@@ -7,13 +7,15 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import type { SpendRequest } from '../../store/appStore';
+import { useAuthStore } from '../../store/authStore';
 import { api } from '../../api/client';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'ManagerMenu'> };
 
-// 매니저 관리 메뉴 — 자주 쓰지 않는 기능(초대 코드, 보상 카탈로그, 보상 요청)을 대시보드에서 한 단계 안으로
+// 매니저 관리 메뉴 — 자주 쓰지 않는 기능(초대 코드, 보상 카탈로그, 보상 요청, 로그아웃)을 대시보드에서 한 단계 안으로
 export function ManagerMenuScreen({ navigation }: Props) {
+    const logout = useAuthStore(s => s.logout);
     const [codeLoading, setCodeLoading] = useState(false);
     const [pendingSpend, setPendingSpend] = useState(0);
 
@@ -39,6 +41,14 @@ export function ManagerMenuScreen({ navigation }: Props) {
         } finally {
             setCodeLoading(false);
         }
+    };
+
+    // 다시 로그인하려면 매니저 키를 입력해야 하므로 한 번 더 확인
+    const handleLogout = () => {
+        Alert.alert('로그아웃', '다시 로그인하려면 매니저 키가 필요해요. 로그아웃할까요?', [
+            { text: '취소', style: 'cancel' },
+            { text: '로그아웃', style: 'destructive', onPress: () => { logout(); } },
+        ]);
     };
 
     return (
@@ -72,6 +82,10 @@ export function ManagerMenuScreen({ navigation }: Props) {
                     loading={codeLoading}
                     onPress={handleGenerateCode}
                 />
+
+                <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+                    <Text style={styles.logoutText}>로그아웃</Text>
+                </TouchableOpacity>
             </ScrollView>
         </SafeAreaView>
     );
@@ -146,6 +160,19 @@ const styles = StyleSheet.create({
         marginTop: 2,
     },
     chevron: { fontSize: 22, color: colors.ink[300], paddingHorizontal: 4 },
+    logoutBtn: {
+        marginTop: 16,
+        paddingVertical: 14,
+        alignItems: 'center',
+        borderRadius: radius.md,
+        borderWidth: 1,
+        borderColor: colors.ink[200],
+    },
+    logoutText: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.base,
+        color: colors.coral[700],
+    },
     badge: {
         minWidth: 22,
         height: 22,
