@@ -182,7 +182,7 @@ export function ApprovalScreen({ navigation, route }: Props) {
 
             {totalPending > 0 && (
                 <View style={styles.pendingBanner}>
-                    <Text style={styles.pendingText}>📋 검토 대기 {totalPending}개</Text>
+                    <Text style={styles.pendingText}>검토 대기 {totalPending}개</Text>
                 </View>
             )}
 
@@ -218,7 +218,7 @@ export function ApprovalScreen({ navigation, route }: Props) {
                                             : null,
                                     ]}>
                                         {group.pendingCount > 0
-                                            ? `⏳ 검토 대기 ${group.pendingCount}개`
+                                            ? `검토 대기 ${group.pendingCount}개`
                                             : group.allDone
                                                 ? `✅ 완료 ${group.tasks.length}개`
                                                 : `진행중 · ${group.tasks.length}개`}
@@ -258,13 +258,13 @@ export function ApprovalScreen({ navigation, route }: Props) {
     );
 }
 
-const STATUS_ICON: Partial<Record<Task['status'], string>> = {
+// 끝난 할일만 ✅, 나머지 상태는 글자로 표시
+const STATUS_TEXT: Partial<Record<Task['status'], string>> = {
     approved:      '✅',
-    rejected:      '❌',
-    plan_approved: '📋✅',
-    plan_rejected: '📋❌',
-    plan_submitted:'📋⏳',
-    todo:          '—',
+    rejected:      '완료 반려',
+    plan_approved: '실행 중',
+    plan_rejected: '계획 반려',
+    todo:          '작성 중',
 };
 
 function TaskCard({
@@ -290,7 +290,7 @@ function TaskCard({
             <View style={styles.taskInfo}>
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 {task.memo ? <Text style={styles.taskMemo}>{task.memo}</Text> : null}
-                {isDeletePending ? <Text style={styles.deleteNote}>🗑 삭제를 요청했어요</Text> : null}
+                {isDeletePending ? <Text style={styles.deleteNote}>삭제를 요청했어요</Text> : null}
             </View>
             {pending && (
                 isLoading
@@ -300,28 +300,28 @@ function TaskCard({
                             {isDeletePending ? (
                                 <>
                                     <TouchableOpacity style={styles.approveBtn} onPress={onApproveDelete}>
-                                        <Text style={styles.approveBtnText}>🗑 삭제 승인</Text>
+                                        <Text style={styles.approveBtnText}>삭제 승인</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.rejectBtn} onPress={onRejectDelete}>
-                                        <Text style={styles.rejectBtnText}>❌ 반려</Text>
+                                        <Text style={styles.rejectBtnText}>반려</Text>
                                     </TouchableOpacity>
                                 </>
                             ) : isPlanPending ? (
                                 <>
                                     <TouchableOpacity style={styles.approveBtn} onPress={onApprovePlan}>
-                                        <Text style={styles.approveBtnText}>📋 계획 승인</Text>
+                                        <Text style={styles.approveBtnText}>계획 승인</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.rejectBtn} onPress={onRejectPlan}>
-                                        <Text style={styles.rejectBtnText}>❌ 반려</Text>
+                                        <Text style={styles.rejectBtnText}>반려</Text>
                                     </TouchableOpacity>
                                 </>
                             ) : (
                                 <>
                                     <TouchableOpacity style={styles.approveBtn} onPress={onApproveCompletion}>
-                                        <Text style={styles.approveBtnText}>✅ 완료 승인</Text>
+                                        <Text style={styles.approveBtnText}>완료 승인</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.rejectBtn} onPress={onRejectCompletion}>
-                                        <Text style={styles.rejectBtnText}>❌ 반려</Text>
+                                        <Text style={styles.rejectBtnText}>반려</Text>
                                     </TouchableOpacity>
                                 </>
                             )}
@@ -329,14 +329,14 @@ function TaskCard({
                     )
             )}
             {!pending && (
-                <Text style={[styles.statusText, {
+                <Text style={[task.status === 'approved' ? styles.statusDone : styles.statusText, {
                     color: task.status === 'approved' ? colors.ocean[500]
                         : task.status === 'rejected' ? colors.coral[500]
-                        : task.status === 'plan_approved' ? colors.ocean[300]
+                        : task.status === 'plan_approved' ? colors.ocean[700]
                         : task.status === 'plan_rejected' ? colors.coral[500]
-                        : colors.ink[300],
+                        : colors.ink[500],
                 }]}>
-                    {STATUS_ICON[task.status] ?? '—'}
+                    {STATUS_TEXT[task.status] ?? '—'}
                 </Text>
             )}
         </View>
@@ -503,5 +503,9 @@ const styles = StyleSheet.create({
         fontSize: fontSizes.xs,
         color: colors.coral[700],
     },
-    statusText: { fontSize: 18 },
+    statusDone: { fontSize: 18 },
+    statusText: {
+        fontFamily: fontFamilies.bodyBold,
+        fontSize: fontSizes.sm,
+    },
 });
