@@ -141,11 +141,12 @@ git push origin v1.0.0
 ## 자체 업데이트 (강제 자동 업데이트)
 
 앱을 켤 때, 앱이 다시 앞으로 올 때, 그리고 켜둔 채로 있는 동안에도 3분마다 GitHub Releases API로 최신 버전을 확인합니다.
+최근 릴리즈 목록에서 버전이 가장 높은 것을 고릅니다 (`releases/latest`는 발행 순서 기준이라 쓰지 않음).
 새 버전이 있으면 묻지 않고 내려받고, 업데이트가 끝날 때까지 앱 화면을 가립니다.
 
 ```
 앱 시작 / 앱이 다시 앞으로 옴
-  └─ GET https://api.github.com/repos/guom0625-dotcom/gom-homework/releases/latest
+  └─ GET https://api.github.com/repos/guom0625-dotcom/gom-homework/releases?per_page=10
        └─ 현재 버전보다 신규 태그 존재?
             └─ YES → 앱 화면을 가리고 APK 자동 다운로드 (진행바 표시)
                   └─ 시스템 패키지 설치 화면 자동 실행

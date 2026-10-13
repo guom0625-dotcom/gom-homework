@@ -6,12 +6,16 @@ import Constants from 'expo-constants';
 
 const REPO = (Constants.expoConfig?.extra as { updateRepo?: string })?.updateRepo
     ?? 'guom0625-dotcom/gom-homework';
-const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
+// releases/latest 는 "가장 나중에 발행된" 릴리즈라, 빌드가 순서와 다르게 끝나면 더 낮은 버전을 가리킬 수 있다.
+// 그래서 최근 릴리즈 목록을 받아 버전이 가장 높은 것을 직접 고른다.
+const API_URL = `https://api.github.com/repos/${REPO}/releases?per_page=10`;
 // GitHub 비로그인 API는 IP당 시간당 60회 제한 — 기기당 최대 20회/시간이 되도록 3분 간격
 const RECHECK_INTERVAL_MS = 3 * 60_000;
 
 interface GHRelease {
     tag_name: string;
+    draft: boolean;
+    prerelease: boolean;
     assets: { name: string; browser_download_url: string }[];
 }
 
@@ -105,9 +109,16 @@ export function useUpdateCheck() {
         try {
             const res = await fetch(API_URL, { headers: { 'Accept': 'application/vnd.github+json' } });
             if (!res.ok) return;
-            const release: GHRelease = await res.json();
+            const releases: GHRelease[] = await res.json();
             const current = Constants.expoConfig?.version ?? '0.0.0';
-            if (!isNewer(release.tag_name, current) || skipped.current === release.tag_name) return;
+
+            // APK가 올라온 정식 릴리즈 중 버전이 가장 높은 것
+            let release: GHRelease | null = null;
+            for (const r of releases) {
+                if (r.draft || r.prerelease || !r.assets.some(a => a.name.endsWith('.apk'))) continue;
+                if (!release || isNewer(r.tag_name, release.tag_name)) release = r;
+            }
+            if (!release || !isNewer(release.tag_name, current) || skipped.current === release.tag_name) return;
 
             const apk = release.assets.find(a => a.name.endsWith('.apk'));
             if (!apk) return;

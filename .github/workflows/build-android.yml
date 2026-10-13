@@ -9,6 +9,12 @@ on:
         description: '버전 (예: 1.2.3) — 미입력 시 run_number 사용'
         required: false
 
+# 릴리즈 빌드는 한 번에 하나씩, 태그를 올린 순서대로.
+# 대기 중인 빌드가 있는데 더 새 태그가 오면 대기 중이던 것은 취소되고 새 것만 빌드된다.
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
