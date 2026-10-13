@@ -205,7 +205,8 @@ Base URL: `http://<서버-IP>:3100`
 | `GET` | `/progress?month=YYYYMM` | 해당 월의 날짜별 할일 현황 (기본: 이번 달) |
 | `GET` | `/tasks?day=YYYYMMDD` | 해당 날짜 할일 목록 |
 | `POST` | `/tasks` | 할일 등록 (오늘 날짜만) — 등록과 동시에 계획 상신 |
-| `POST` | `/tasks/:id/submit-plan` | 반려된 계획 다시 상신 |
+| `PATCH` | `/tasks/:id` | 반려된 계획의 제목·메모를 고쳐서 다시 상신 |
+| `POST` | `/tasks/:id/submit-plan` | 반려된 계획을 그대로 다시 상신 |
 | `POST` | `/tasks/:id/submit` | 완료 상신 |
 | `POST` | `/tasks/:id/request-delete` | 할일 삭제 요청 (매니저 승인 필요) |
 | `POST` | `/tasks/:id/cancel-delete` | 삭제 요청 취소 |

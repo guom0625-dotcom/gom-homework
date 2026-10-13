@@ -13,6 +13,11 @@ const CreateBody = z.object({
     memo: z.string().max(500).optional(),
 });
 
+const EditBody = z.object({
+    title: z.string().min(1).max(100),
+    memo: z.string().max(500).nullable().optional(),
+});
+
 const RejectBody = z.object({
     reason: z.string().max(200).optional(),
 });
@@ -113,6 +118,33 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         });
 
         return reply.code(201).send(db.prepare('SELECT * FROM tasks WHERE id = ?').get(id));
+    });
+
+    // PATCH /tasks/:id  (student only — 반려된 계획을 고쳐서 다시 상신: plan_rejected/todo → plan_submitted)
+    app.patch('/tasks/:id', { preHandler: auth }, async (req, reply) => {
+        if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
+        const { id } = req.params as { id: string };
+        const body = EditBody.safeParse(req.body);
+        if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
+
+        const task = ownTask(id, req.user.id);
+        if (!task) return reply.code(404).send({ error: 'not_found' });
+        if (task.day !== todayKST()) return reply.code(409).send({ error: 'day_passed' });
+        if (task.status !== 'todo' && task.status !== 'plan_rejected') {
+            return reply.code(409).send({ error: 'cannot_edit' });
+        }
+
+        db.prepare(
+            "UPDATE tasks SET title = ?, memo = ?, status = 'plan_submitted' WHERE id = ?"
+        ).run(body.data.title, body.data.memo ?? null, id);
+
+        await sendPush(managerPushToken(req.user.id), {
+            title: `${userName(req.user.id)}의 계획 수정 상신`,
+            body: body.data.title,
+            data: { type: 'plan_submitted', task_id: id },
+        });
+
+        return db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
     });
 
     // POST /tasks/:id/submit-plan  (student only — todo/plan_rejected → plan_submitted)

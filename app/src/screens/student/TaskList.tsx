@@ -143,12 +143,23 @@ export function TaskListScreen({ navigation, route }: Props) {
                                     {loadingId === item.id
                                         ? <ActivityIndicator size="small" color={colors.ocean[500]} />
                                         : (
+                                          <>
+                                            <TouchableOpacity
+                                                style={styles.editBtn}
+                                                onPress={() => navigation.navigate('TaskRegister', {
+                                                    day,
+                                                    task: { id: item.id, title: item.title, memo: item.memo },
+                                                })}
+                                            >
+                                                <Text style={styles.editBtnText}>✏️ 수정</Text>
+                                            </TouchableOpacity>
                                             <TouchableOpacity
                                                 style={[styles.submitBtn, styles.planBtn]}
                                                 onPress={() => handleSubmitPlan(item.id)}
                                             >
                                                 <Text style={styles.submitBtnText}>📋 계획 상신</Text>
                                             </TouchableOpacity>
+                                          </>
                                         )
                                     }
                                 </View>
@@ -256,6 +267,18 @@ const styles = StyleSheet.create({
     actionBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     // 계획 상신 = 파랑, 완료 상신 = 초록 (submitBtn 기본색)
     planBtn: { backgroundColor: colors.sky[500] },
+    editBtn: {
+        borderRadius: radius.pill,
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+        borderWidth: 1,
+        borderColor: colors.sky[500],
+    },
+    editBtnText: {
+        fontFamily: fontFamilies.bodyBold,
+        fontSize: fontSizes.xs,
+        color: colors.sky[700],
+    },
     submitBtn: {
         backgroundColor: colors.ocean[500],
         borderRadius: radius.pill,

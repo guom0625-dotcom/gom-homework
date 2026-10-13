@@ -114,6 +114,7 @@ interface AppState {
     fetchMe: () => Promise<void>;
     fetchTasks: (day: number) => Promise<void>;
     createTask: (day: number, title: string, memo?: string) => Promise<void>;
+    editTask: (id: string, title: string, memo?: string) => Promise<void>;
     submitTask: (id: string) => Promise<void>;
     requestDeleteTask: (id: string) => Promise<void>;
     cancelDeleteTask: (id: string) => Promise<void>;
@@ -192,6 +193,15 @@ export const useAppStore = create<AppState>((set, get) => {
             body: JSON.stringify({ day, title, memo }),
         });
         set(withTasks([...get().tasks, task], day));
+    },
+
+    // 반려된 계획을 고치면 서버가 바로 다시 상신 상태로 돌려준다
+    editTask: async (id, title, memo) => {
+        const task = await api<Task>(`/tasks/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ title, memo: memo ?? null }),
+        });
+        set(withTasks(get().tasks.map(t => t.id === id ? task : t), task.day));
     },
 
     submitTask: async (id) => {

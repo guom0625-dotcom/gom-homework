@@ -29,7 +29,8 @@ export type AuthStackParams = {
 export type StudentStackParams = {
     Main: undefined;
     TaskList: { day: number };
-    TaskRegister: { day: number };
+    // task 가 있으면 반려된 계획을 고쳐서 다시 상신하는 수정 모드
+    TaskRegister: { day: number; task?: { id: string; title: string; memo: string | null } };
     Spend: undefined;
     Profile: undefined;
 };

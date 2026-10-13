@@ -17,17 +17,19 @@ type Props = {
 };
 
 export function TaskRegisterScreen({ navigation, route }: Props) {
-    const { day } = route.params;
-    const [title, setTitle] = useState('');
-    const [memo, setMemo] = useState('');
+    const { day, task } = route.params;
+    const [title, setTitle] = useState(task?.title ?? '');
+    const [memo, setMemo] = useState(task?.memo ?? '');
     const [loading, setLoading] = useState(false);
     const createTask = useAppStore(s => s.createTask);
+    const editTask = useAppStore(s => s.editTask);
 
     const handleSave = async () => {
         if (!title.trim()) { Alert.alert('할일 제목을 입력해주세요'); return; }
         setLoading(true);
         try {
-            await createTask(day, title.trim(), memo.trim() || undefined);
+            if (task) await editTask(task.id, title.trim(), memo.trim() || undefined);
+            else await createTask(day, title.trim(), memo.trim() || undefined);
             navigation.goBack();
         } catch (e: unknown) {
             Alert.alert('오류', e instanceof Error ? e.message : '저장 실패');
@@ -46,7 +48,7 @@ export function TaskRegisterScreen({ navigation, route }: Props) {
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
                         <Text style={styles.backText}>✕</Text>
                     </TouchableOpacity>
-                    <Text style={styles.title}>{formatDay(day)} 할일 추가</Text>
+                    <Text style={styles.title}>{task ? '계획 수정' : `${formatDay(day)} 할일 추가`}</Text>
                     <View style={{ width: 36 }} />
                 </View>
 
@@ -84,7 +86,7 @@ export function TaskRegisterScreen({ navigation, route }: Props) {
                     >
                         {loading
                             ? <ActivityIndicator color="#fff" />
-                            : <Text style={styles.saveBtnText}>📋 계획 상신하기</Text>
+                            : <Text style={styles.saveBtnText}>{task ? '📋 수정해서 다시 상신' : '📋 계획 상신하기'}</Text>
                         }
                     </TouchableOpacity>
                 </View>
