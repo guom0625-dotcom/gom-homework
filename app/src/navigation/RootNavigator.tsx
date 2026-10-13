@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
@@ -18,7 +18,7 @@ import { CatalogScreen } from '../screens/manager/CatalogScreen';
 import { RewardUseScreen } from '../screens/manager/RewardUseScreen';
 import { SpendScreen } from '../screens/student/SpendScreen';
 import { ProfileScreen } from '../screens/student/ProfileScreen';
-import { colors } from '../theme';
+import { colors, fontFamilies, fontSizes, radius } from '../theme';
 
 export type AuthStackParams = {
     Welcome: undefined;
@@ -74,11 +74,18 @@ function ManagerNavigator() {
 
 export function RootNavigator() {
     useServerUrl();
-    const { user, isLoading, init, needsPairing } = useAuthStore();
+    const { user, isLoading, init, needsPairing, connectionError } = useAuthStore();
     const { fetchMe, reset } = useAppStore();
     usePushRegistration(user?.id);
 
     useEffect(() => { init(); }, []);
+
+    // 서버에 닿지 못한 상태면 5초마다 다시 시도 (WiFi가 늦게 붙는 경우 등)
+    useEffect(() => {
+        if (!connectionError) return;
+        const timer = setInterval(() => { init(); }, 5000);
+        return () => clearInterval(timer);
+    }, [connectionError]);
 
     useEffect(() => {
         if (user) {
@@ -92,6 +99,26 @@ export function RootNavigator() {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.paper }}>
                 <ActivityIndicator size="large" color={colors.ocean[500]} />
+            </View>
+        );
+    }
+
+    if (connectionError && !user) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 14, padding: 24, backgroundColor: colors.paper }}>
+                <Text style={{ fontSize: 40 }}>📡</Text>
+                <Text style={{ fontFamily: fontFamilies.display, fontSize: fontSizes['2xl'], color: colors.ink[900] }}>
+                    서버에 연결할 수 없어요
+                </Text>
+                <Text style={{ fontFamily: fontFamilies.body, fontSize: fontSizes.sm, color: colors.ink[500], textAlign: 'center' }}>
+                    인터넷 연결을 확인해주세요.{'\n'}연결되면 자동으로 다시 시도해요.
+                </Text>
+                <TouchableOpacity
+                    onPress={() => { init(); }}
+                    style={{ backgroundColor: colors.ocean[500], borderRadius: radius.pill, paddingHorizontal: 24, paddingVertical: 10 }}
+                >
+                    <Text style={{ fontFamily: fontFamilies.bodyBold, fontSize: fontSizes.base, color: '#fff' }}>다시 시도</Text>
+                </TouchableOpacity>
             </View>
         );
     }

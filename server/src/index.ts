@@ -68,7 +68,8 @@ registerCatalogRoutes(app, db, auth);
 registerRewardRoutes(app, db, auth);
 registerStudentRoutes(app, db, auth);
 
-app.get('/health', async () => ({ ok: true, time: Date.now() }));
+// app: 앱이 집 WiFi에서 내부 주소가 진짜 이 서버인지 확인하는 데 쓴다
+app.get('/health', async () => ({ ok: true, app: 'gom-homework', time: Date.now() }));
 
 const shutdown = async (signal: string) => {
     app.log.info({ signal }, 'shutting down');

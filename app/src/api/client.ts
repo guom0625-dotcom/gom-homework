@@ -1,7 +1,16 @@
-const DEFAULT_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.1.225:3100';
+// 기본은 어디서나 되는 외부 주소. 집 WiFi에서 내부 주소가 응답하면 useServerUrl 이 바꿔준다.
+const DEFAULT_BASE = process.env.EXPO_PUBLIC_API_URL_EXTERNAL ?? 'https://guom0625.duckdns.org/hw';
 
 let _base = DEFAULT_BASE;
 let _key: string | null = null;
+
+// 앱 시작 직후 서버 주소 판정(내부/외부)이 끝나기 전에 요청이 엉뚱한 주소로 나가지 않도록 기다린다
+let _markReady: () => void = () => {};
+const _baseReady = Promise.race([
+    new Promise<void>(resolve => { _markReady = resolve; }),
+    new Promise<void>(resolve => setTimeout(resolve, 4000)),  // 판정이 끝나지 않아도 무한정 막지는 않는다
+]);
+export const markApiBaseReady = () => _markReady();
 
 export const setApiKey = (key: string | null) => { _key = key; };
 export const setApiBase = (url: string) => { _base = url; };
@@ -19,6 +28,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     };
     if (_key) headers['Authorization'] = `Bearer ${_key}`;
 
+    await _baseReady;
     const res = await fetch(`${_base}${path}`, { ...init, headers });
     if (!res.ok) {
         const body = await res.json().catch(() => ({ error: res.statusText }));

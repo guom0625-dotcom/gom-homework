@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
-import { api, setApiKey } from '../api/client';
+import { api, ApiError, setApiKey } from '../api/client';
 
 const STORE_KEY = 'gom_auth_key';
 
@@ -15,6 +15,7 @@ interface AuthState {
     key: string | null;
     isLoading: boolean;
     needsPairing: boolean;
+    connectionError: boolean;  // 저장된 키는 있는데 서버에 닿지 못함
 
     init: () => Promise<void>;
     signup: (name: string, role: 'manager' | 'student') => Promise<void>;
@@ -28,6 +29,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     key: null,
     isLoading: true,
     needsPairing: false,
+    connectionError: false,
 
     init: async () => {
         try {
@@ -39,11 +41,20 @@ export const useAuthStore = create<AuthState>((set) => ({
                 set({ isLoading: false, needsPairing: true });
                 return;
             }
-            set({ key, user: { id: me.id, name: me.name, role: me.role }, isLoading: false, needsPairing: false });
-        } catch {
-            await SecureStore.deleteItemAsync(STORE_KEY).catch(() => {});
-            setApiKey(null);
-            set({ isLoading: false, needsPairing: false });
+            set({
+                key, user: { id: me.id, name: me.name, role: me.role },
+                isLoading: false, needsPairing: false, connectionError: false,
+            });
+        } catch (e) {
+            // 서버가 키를 거부(401)한 경우에만 로그아웃 처리한다.
+            // 네트워크 문제로 실패했을 때 키를 지우면 계정으로 돌아갈 수 없게 된다.
+            if (e instanceof ApiError && e.status === 401) {
+                await SecureStore.deleteItemAsync(STORE_KEY).catch(() => {});
+                setApiKey(null);
+                set({ isLoading: false, needsPairing: false, connectionError: false });
+            } else {
+                set({ isLoading: false, connectionError: true });
+            }
         }
     },
 

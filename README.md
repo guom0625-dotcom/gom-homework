@@ -74,7 +74,8 @@ npm run admin create-manager "엄마"
 cd app
 npm install
 # app/.env 수정 — 서버 LAN IP 설정
-# EXPO_PUBLIC_API_URL=http://<서버-IP>:3100
+# EXPO_PUBLIC_API_URL_INTERNAL=http://<서버-IP>:3100
+# EXPO_PUBLIC_API_URL_EXTERNAL=https://<도메인>/hw
 
 npx expo start
 ```
@@ -85,7 +86,10 @@ Expo Go 앱에서 QR 스캔하여 테스트.
 
 | 변수 | 예시 | 설명 |
 |---|---|---|
-| `EXPO_PUBLIC_API_URL` | `http://192.168.1.225:3100` | 서버 주소 (폰에서 접근 가능한 LAN IP) |
+| `EXPO_PUBLIC_API_URL_INTERNAL` | `http://192.168.1.225:3100` | 집 WiFi 안에서 서버에 직접 붙는 주소 |
+| `EXPO_PUBLIC_API_URL_EXTERNAL` | `https://guom0625.duckdns.org/hw` | 그 외 모든 곳에서 쓰는 주소 |
+
+WiFi에 연결돼 있으면 앱이 내부 주소의 `/health`를 1.5초 안에 찔러 보고, 이 서버가 응답하면 내부 주소를, 아니면 외부 주소를 쓴다 (WiFi 이름을 읽지 않으므로 위치 권한 불필요).
 
 ---
 

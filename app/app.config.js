@@ -22,8 +22,6 @@ module.exports = {
       permissions: [
         ...(base.expo.android.permissions ?? []),
         'REQUEST_INSTALL_PACKAGES',
-        'ACCESS_FINE_LOCATION',
-        'ACCESS_WIFI_STATE',
         'POST_NOTIFICATIONS',
       ],
     },
@@ -32,6 +30,8 @@ module.exports = {
       'expo-secure-store',
       'expo-file-system',
       'expo-notifications',
+      // 집 WiFi 안에서는 서버 내부 주소(http://192.168.x.x)로 직접 붙는다 — 릴리즈 빌드는 평문 HTTP가 기본 차단이라 허용 필요
+      ['expo-build-properties', { android: { usesCleartextTraffic: true } }],
     ],
     extra: {
       ...base.expo.extra,
