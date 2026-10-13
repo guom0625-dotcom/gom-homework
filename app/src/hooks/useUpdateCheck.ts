@@ -7,7 +7,8 @@ import Constants from 'expo-constants';
 const REPO = (Constants.expoConfig?.extra as { updateRepo?: string })?.updateRepo
     ?? 'guom0625-dotcom/gom-homework';
 const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
-const RECHECK_INTERVAL_MS = 10 * 60_000;
+// GitHub 비로그인 API는 IP당 시간당 60회 제한 — 기기당 최대 20회/시간이 되도록 3분 간격
+const RECHECK_INTERVAL_MS = 3 * 60_000;
 
 interface GHRelease {
     tag_name: string;
@@ -122,11 +123,15 @@ export function useUpdateCheck() {
         if (Platform.OS !== 'android' || __DEV__) return;
 
         check();
-        // 앱이 다시 앞으로 올 때마다 확인 (오래 켜둔 앱도 새 버전을 놓치지 않도록)
+        // 앱이 종료되지 않고 계속 떠 있어도 새 버전을 놓치지 않도록:
+        // 다시 앞으로 올 때, 그리고 켜둔 채로 있는 동안에도 주기적으로 확인
         const sub = AppState.addEventListener('change', next => {
             if (next === 'active') check();
         });
-        return () => sub.remove();
+        const timer = setInterval(() => {
+            if (AppState.currentState === 'active') check();
+        }, RECHECK_INTERVAL_MS + 5_000);
+        return () => { sub.remove(); clearInterval(timer); };
     }, [check]);
 
     /** 설치 화면 다시 띄우기 / 실패 후 재시도 */
