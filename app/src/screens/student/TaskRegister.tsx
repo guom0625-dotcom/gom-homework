@@ -84,7 +84,7 @@ export function TaskRegisterScreen({ navigation, route }: Props) {
                     >
                         {loading
                             ? <ActivityIndicator color="#fff" />
-                            : <Text style={styles.saveBtnText}>저장하기</Text>
+                            : <Text style={styles.saveBtnText}>📋 계획 상신하기</Text>
                         }
                     </TouchableOpacity>
                 </View>

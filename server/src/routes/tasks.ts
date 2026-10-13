@@ -91,6 +91,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
     });
 
     // POST /tasks  (student only — 오늘 날짜에만 등록 가능)
+    // 등록과 동시에 계획이 상신된다(plan_submitted). 반려되면 학생이 submit-plan 으로 다시 상신.
     app.post('/tasks', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
         const body = CreateBody.safeParse(req.body);
@@ -102,13 +103,13 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         const id = ulid();
         db.prepare(`
             INSERT INTO tasks (id, student_id, day, title, memo, status, created_at)
-            VALUES (?, ?, ?, ?, ?, 'todo', ?)
+            VALUES (?, ?, ?, ?, ?, 'plan_submitted', ?)
         `).run(id, req.user.id, day, title, memo ?? null, Date.now());
 
         await sendPush(managerPushToken(req.user.id), {
-            title: `${userName(req.user.id)}의 할일 등록`,
+            title: `${userName(req.user.id)}의 계획 상신`,
             body: title,
-            data: { type: 'task_created', task_id: id },
+            data: { type: 'plan_submitted', task_id: id },
         });
 
         return reply.code(201).send(db.prepare('SELECT * FROM tasks WHERE id = ?').get(id));

@@ -144,10 +144,10 @@ export function TaskListScreen({ navigation, route }: Props) {
                                         ? <ActivityIndicator size="small" color={colors.ocean[500]} />
                                         : (
                                             <TouchableOpacity
-                                                style={styles.submitBtn}
+                                                style={[styles.submitBtn, styles.planBtn]}
                                                 onPress={() => handleSubmitPlan(item.id)}
                                             >
-                                                <Text style={styles.submitBtnText}>계획 상신</Text>
+                                                <Text style={styles.submitBtnText}>📋 계획 상신</Text>
                                             </TouchableOpacity>
                                         )
                                     }
@@ -163,7 +163,7 @@ export function TaskListScreen({ navigation, route }: Props) {
                                                 onPress={() => handleSubmit(item.id)}
                                             >
                                                 <Text style={styles.submitBtnText}>
-                                                    {item.status === 'rejected' ? '재제출' : '완료 상신'}
+                                                    {item.status === 'rejected' ? '✅ 완료 재상신' : '✅ 완료 상신'}
                                                 </Text>
                                             </TouchableOpacity>
                                         )
@@ -254,6 +254,8 @@ const styles = StyleSheet.create({
         fontSize: fontSizes.xs,
     },
     actionBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    // 계획 상신 = 파랑, 완료 상신 = 초록 (submitBtn 기본색)
+    planBtn: { backgroundColor: colors.sky[500] },
     submitBtn: {
         backgroundColor: colors.ocean[500],
         borderRadius: radius.pill,
