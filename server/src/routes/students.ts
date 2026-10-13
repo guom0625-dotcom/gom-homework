@@ -12,7 +12,7 @@ export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHa
         if (req.user.role !== 'manager') return reply.code(403).send({ error: 'forbidden' });
 
         const students = db.prepare(`
-            SELECT u.id, u.name, u.character, u.avatar,
+            SELECT u.id, u.name, u.character, u.avatar, u.created_at,
                    COALESCE(gb.diamond, 0) AS diamonds,
                    (SELECT COUNT(*) FROM tasks t WHERE t.student_id = u.id AND t.day = ?) AS today_total,
                    (SELECT COUNT(*) FROM tasks t WHERE t.student_id = u.id
@@ -23,9 +23,9 @@ export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHa
             LEFT JOIN gems_balance gb ON gb.student_id = u.id
             WHERE l.manager_id = ?
             ORDER BY u.name
-        `).all(todayKST(), req.user.id);
+        `).all(todayKST(), req.user.id) as { created_at: number }[];
 
-        return students;
+        return students.map(({ created_at, ...s }) => ({ ...s, joined_day: todayKST(created_at) }));
     });
 
     // POST /students/:id/nudge  (manager: 오늘 할일을 아직 등록하지 않은 학생에게 등록하라고 알림)
@@ -53,6 +53,34 @@ export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHa
 
         // delivered=false: 학생 폰에 알림이 아직 설정되지 않았거나 발송 실패
         return { ok: true, delivered };
+    });
+
+    // DELETE /students/:id  (manager: 학생 삭제 — 되돌릴 수 없음)
+    // 연결을 끊고, 다른 매니저와도 연결돼 있지 않으면 계정과 그 학생의 모든 기록을 지운다
+    app.delete('/students/:id', { preHandler: auth }, async (req, reply) => {
+        if (req.user.role !== 'manager') return reply.code(403).send({ error: 'forbidden' });
+        const { id } = req.params as { id: string };
+
+        const link = db.prepare(
+            'SELECT 1 FROM manager_student_link WHERE manager_id = ? AND student_id = ?'
+        ).get(req.user.id, id);
+        if (!link) return reply.code(403).send({ error: 'forbidden' });
+
+        const deleted = db.transaction(() => {
+            db.prepare('DELETE FROM manager_student_link WHERE manager_id = ? AND student_id = ?')
+                .run(req.user.id, id);
+            const others = db.prepare('SELECT 1 FROM manager_student_link WHERE student_id = ?').get(id);
+            if (others) return false;
+
+            for (const table of ['tasks', 'owned_rewards', 'gem_transactions', 'gems_balance', 'auto_reward_rules', 'pairing_codes']) {
+                db.prepare(`DELETE FROM ${table} WHERE student_id = ?`).run(id);
+            }
+            db.prepare('DELETE FROM auth_keys WHERE user_id = ?').run(id);
+            db.prepare('DELETE FROM users WHERE id = ?').run(id);
+            return true;
+        })();
+
+        return { ok: true, account_deleted: deleted };
     });
 
     // PATCH /students/:id  (manager: rename student)

@@ -55,6 +55,7 @@ export interface StudentSummary {
     name: string;
     character: CharacterType;
     avatar: string | null;
+    joined_day: number;      // 가입한 날짜
     diamonds: number;
     today_total: number;     // 오늘 등록한 할일 수
     pending_review: number;  // 매니저 검토를 기다리는 할일 수

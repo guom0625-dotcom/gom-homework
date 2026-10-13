@@ -220,6 +220,7 @@ Base URL: `http://<서버-IP>:3100`
 |---|---|---|
 | `GET` | `/students` | 연결된 학생 목록 + 다이아 잔고 + 오늘 할일 수 |
 | `POST` | `/students/:id/nudge` | 오늘 할일 미등록 학생에게 등록 알림 푸시 |
+| `DELETE` | `/students/:id` | 학생 삭제 (연결 해제 + 계정과 모든 기록 삭제, 되돌릴 수 없음) |
 | `GET` | `/students/:id/progress?month=YYYYMM` | 특정 학생의 월별 날짜 현황 |
 | `GET` | `/tasks?student_id=xxx&from=YYYYMMDD` | 특정 학생의 `from` 이후 할일 + 검토 대기 중인 할일 → `{ tasks, older_day }` |
 | `POST` | `/tasks/:id/approve` | 할일 완료 승인 |

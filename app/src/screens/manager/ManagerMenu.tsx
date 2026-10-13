@@ -9,6 +9,7 @@ import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { useAppStore, type OwnedReward } from '../../store/appStore';
 import { useAuthStore } from '../../store/authStore';
 import { api } from '../../api/client';
+import { formatDay } from '../../lib/days';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'ManagerMenu'> };
@@ -20,6 +21,7 @@ export function ManagerMenuScreen({ navigation }: Props) {
     const [pendingUse, setPendingUse] = useState(0);
     const { students, fetchStudents } = useAppStore();
     const [loginCodeFor, setLoginCodeFor] = useState<string | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     useFocusEffect(useCallback(() => {
         api<OwnedReward[]>('/rewards?status=use_requested')
@@ -63,6 +65,35 @@ export function ManagerMenuScreen({ navigation }: Props) {
         }
     };
 
+    // 학생 삭제는 되돌릴 수 없으므로 두 번 확인한다
+    const handleDeleteStudent = (studentId: string, name: string) => {
+        const remove = async () => {
+            setDeletingId(studentId);
+            try {
+                await api(`/students/${studentId}`, { method: 'DELETE' });
+                await fetchStudents();
+            } catch {
+                Alert.alert('오류', '삭제에 실패했어요');
+            } finally {
+                setDeletingId(null);
+            }
+        };
+        Alert.alert(`${name} 삭제`, `${name}의 계정을 삭제할까요?`, [
+            { text: '취소', style: 'cancel' },
+            {
+                text: '삭제', style: 'destructive',
+                onPress: () => Alert.alert(
+                    '정말 삭제할까요?',
+                    `${name}의 할일 기록, 다이아, 보유 보상이 모두 지워지고 되돌릴 수 없어요. ${name}의 폰에서도 로그아웃돼요.`,
+                    [
+                        { text: '취소', style: 'cancel' },
+                        { text: '모두 삭제', style: 'destructive', onPress: () => { remove(); } },
+                    ],
+                ),
+            },
+        ]);
+    };
+
     // 다시 로그인하려면 매니저 키를 입력해야 하므로 한 번 더 확인
     const handleLogout = () => {
         Alert.alert('로그아웃', '다시 로그인하려면 매니저 키가 필요해요. 로그아웃할까요?', [
@@ -102,15 +133,25 @@ export function ManagerMenuScreen({ navigation }: Props) {
                     loading={codeLoading}
                     onPress={handleGenerateCode}
                 />
+
                 {students.map(st => (
-                    <MenuItem
-                        key={st.id}
-                        icon="🔑"
-                        label={`${st.name} 재로그인 코드`}
-                        desc="로그아웃했거나 폰을 바꿨을 때 원래 계정으로 다시 들어가기"
-                        loading={loginCodeFor === st.id}
-                        onPress={() => handleLoginCode(st.id, st.name)}
-                    />
+                    <View key={st.id} style={styles.studentSection}>
+                        <Text style={styles.sectionTitle}>{st.name} · {formatDay(st.joined_day)} 가입</Text>
+                        <MenuItem
+                            icon="🔑"
+                            label="재로그인 코드"
+                            desc="로그아웃했거나 폰을 바꿨을 때 원래 계정으로 다시 들어가기"
+                            loading={loginCodeFor === st.id}
+                            onPress={() => handleLoginCode(st.id, st.name)}
+                        />
+                        <MenuItem
+                            icon="🗑"
+                            label="학생 삭제"
+                            desc="계정과 모든 기록을 지워요 (되돌릴 수 없음)"
+                            loading={deletingId === st.id}
+                            onPress={() => handleDeleteStudent(st.id, st.name)}
+                        />
+                    </View>
                 ))}
 
                 <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
@@ -167,6 +208,13 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     list: { padding: 16, gap: 10 },
+    studentSection: { gap: 10, marginTop: 14 },
+    sectionTitle: {
+        fontFamily: fontFamilies.bodyBold,
+        fontSize: fontSizes.sm,
+        color: colors.ink[500],
+        paddingHorizontal: 4,
+    },
     item: {
         backgroundColor: colors.card,
         borderRadius: radius.md,
