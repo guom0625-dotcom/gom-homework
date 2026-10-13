@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
 import type { CharacterType, DayStatus } from '../lib/types';
+import { WEEK_MS } from '../lib/days';
 
 export interface Task {
     id: string;
@@ -96,15 +97,18 @@ interface AppState {
 
     // student — 상점 & 보유 보상
     catalog: CatalogItem[];
-    rewards: OwnedReward[];
+    rewards: OwnedReward[];           // 안 쓴 보상 전부 + rewardsSince 이후 사용 완료된 보상
+    rewardsSince: number;
+    rewardsOlderUsedAt: number | null; // 더 예전에 사용 완료된 보상이 있으면 그 시각
     fetchCatalog: () => Promise<void>;
-    fetchRewards: () => Promise<void>;
+    fetchRewards: (usedSince?: number) => Promise<void>;
     buyReward: (catalogId: string) => Promise<void>;
     requestUseReward: (id: string) => Promise<void>;
 
     // manager
     students: StudentSummary[];
-    selectedStudentTasks: Task[];
+    selectedStudentTasks: Task[];       // from 이후 날짜 + 검토 대기 중인 할일
+    selectedOlderDay: number | null;    // 그보다 앞선 할일이 있는 가장 최근 날짜
 
     fetchMe: () => Promise<void>;
     fetchTasks: (day: number) => Promise<void>;
@@ -114,7 +118,7 @@ interface AppState {
     cancelDeleteTask: (id: string) => Promise<void>;
 
     fetchStudents: () => Promise<void>;
-    fetchStudentTasks: (studentId: string, day?: number) => Promise<void>;
+    fetchStudentTasks: (studentId: string, from: number) => Promise<void>;
     approveTask: (id: string) => Promise<void>;
     rejectTask: (id: string) => Promise<void>;
     submitPlan: (id: string) => Promise<void>;
@@ -139,8 +143,11 @@ const initialState = {
     avatar: null as string | null,
     catalog: [] as CatalogItem[],
     rewards: [] as OwnedReward[],
+    rewardsSince: 0,
+    rewardsOlderUsedAt: null as number | null,
     students: [],
     selectedStudentTasks: [],
+    selectedOlderDay: null as number | null,
 };
 
 export const useAppStore = create<AppState>((set, get) => {
@@ -215,9 +222,13 @@ export const useAppStore = create<AppState>((set, get) => {
         set({ catalog });
     },
 
-    fetchRewards: async () => {
-        const rewards = await api<OwnedReward[]>('/rewards');
-        set({ rewards });
+    // 사용 완료된 보상은 최근 1주치만 받고, 더 보기로 범위를 넓힌다 (usedSince 생략 시 현재 범위 유지)
+    fetchRewards: async (usedSince) => {
+        const since = usedSince ?? (get().rewardsSince || Date.now() - WEEK_MS);
+        const res = await api<{ rewards: OwnedReward[]; older_used_at: number | null }>(
+            `/rewards?used_since=${since}`
+        );
+        set({ rewards: res.rewards, rewardsSince: since, rewardsOlderUsedAt: res.older_used_at });
     },
 
     // 구매 즉시 다이아가 차감되고 보상을 보유한다. 1회성 보상은 상점에서 사라지므로 목록도 다시 받는다
@@ -238,12 +249,11 @@ export const useAppStore = create<AppState>((set, get) => {
         set({ students });
     },
 
-    fetchStudentTasks: async (studentId, day) => {
-        const url = day
-            ? `/tasks?student_id=${studentId}&day=${day}`
-            : `/tasks?student_id=${studentId}`;
-        const selectedStudentTasks = await api<Task[]>(url);
-        set({ selectedStudentTasks });
+    fetchStudentTasks: async (studentId, from) => {
+        const res = await api<{ tasks: Task[]; older_day: number | null }>(
+            `/tasks?student_id=${studentId}&from=${from}`
+        );
+        set({ selectedStudentTasks: res.tasks, selectedOlderDay: res.older_day });
     },
 
     // 보상은 할일 단위가 아니라, 하루 할일이 전부 승인된 날에 대해 날짜가 바뀐 뒤 서버가 자동 지급

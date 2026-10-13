@@ -16,3 +16,22 @@ export function monthDays(day: number): number[] {
     const count = new Date(y, m, 0).getDate();
     return Array.from({ length: count }, (_, i) => y * 10000 + m * 100 + i + 1);
 }
+
+const KST_OFFSET_MS = 9 * 3_600_000;
+const DAY_MS = 86_400_000;
+export const WEEK_MS = 7 * DAY_MS;
+
+function fromUTC(ms: number): number {
+    return Number(new Date(ms).toISOString().slice(0, 10).replace(/-/g, ''));
+}
+
+/** 기기 시계 기준 오늘(KST). 목록의 "최근 1주" 범위 계산용 */
+export function todayKST(): number {
+    return fromUTC(Date.now() + KST_OFFSET_MS);
+}
+
+/** 날짜에 n일 더하기 (음수 가능) */
+export function addDays(day: number, n: number): number {
+    const { y, m, d } = dayParts(day);
+    return fromUTC(Date.UTC(y, m - 1, d) + n * DAY_MS);
+}

@@ -9,6 +9,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
 import { useAppStore, type CatalogItem, type OwnedReward } from '../../store/appStore';
 import { Gem } from '../../components/Gem';
+import { WEEK_MS } from '../../lib/days';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<StudentStackParams, 'Spend'> };
@@ -39,7 +40,10 @@ const REWARD_STATUS: Record<OwnedReward['status'], string> = {
 
 // 상점: 다이아로 보상을 구매 → 내 보상에 쌓임 → "사용"을 누르면 매니저가 실제로 해주고 사용 완료 처리
 export function SpendScreen({ navigation }: Props) {
-    const { diamonds, catalog, rewards, fetchCatalog, fetchRewards, fetchMe, buyReward, requestUseReward } = useAppStore();
+    const {
+        diamonds, catalog, rewards, rewardsSince, rewardsOlderUsedAt,
+        fetchCatalog, fetchRewards, fetchMe, buyReward, requestUseReward,
+    } = useAppStore();
     const [tab, setTab] = useState<Tab>('shop');
     const [refreshing, setRefreshing] = useState(false);
     const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -113,6 +117,12 @@ export function SpendScreen({ navigation }: Props) {
                 },
             ],
         );
+    };
+
+    // 사용 완료된 보상은 최근 1주일치만 — 더 보기로 1주일씩 넓힌다
+    const showOlderWeek = () => {
+        if (rewardsOlderUsedAt == null) return;
+        fetchRewards(Math.min(rewardsSince - WEEK_MS, rewardsOlderUsedAt)).catch(() => {});
     };
 
     // 아직 쓰지 않은 보상이 위로
@@ -199,6 +209,11 @@ export function SpendScreen({ navigation }: Props) {
                             </Text>
                         </View>
                     }
+                    ListFooterComponent={rewardsOlderUsedAt != null ? (
+                        <TouchableOpacity style={styles.moreBtn} onPress={showOlderWeek}>
+                            <Text style={styles.moreBtnText}>이전에 쓴 보상 1주일 더 보기</Text>
+                        </TouchableOpacity>
+                    ) : null}
                     renderItem={({ item }) => (
                         <View style={[styles.card, item.status === 'used' && styles.cardDisabled]}>
                             <View style={styles.cardBody}>
@@ -325,6 +340,19 @@ const styles = StyleSheet.create({
         fontSize: fontSizes.xs,
         color: colors.ink[700],
         fontWeight: '700',
+    },
+    moreBtn: {
+        paddingVertical: 14,
+        alignItems: 'center',
+        borderRadius: radius.md,
+        borderWidth: 1,
+        borderColor: colors.ink[200],
+        marginTop: 4,
+    },
+    moreBtnText: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.sm,
+        color: colors.ink[500],
     },
     onceChip: { backgroundColor: colors.sun[300] },
     rewardStatus: {

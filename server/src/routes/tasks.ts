@@ -57,8 +57,10 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
     };
 
     // GET /tasks?day=YYYYMMDD&student_id=xxx  (student sees own; manager sees linked student's)
+    // GET /tasks?from=YYYYMMDD&student_id=xxx → { tasks, older_day }
+    //   from 이후 날짜의 할일 + 날짜와 무관하게 매니저 검토를 기다리는 할일. older_day = 그보다 앞선 가장 최근 날짜(없으면 null)
     app.get('/tasks', { preHandler: auth }, async (req, reply) => {
-        const { day, student_id } = req.query as { day?: string; student_id?: string };
+        const { day, from, student_id } = req.query as { day?: string; from?: string; student_id?: string };
 
         let targetId: string;
         if (req.user.role === 'student') {
@@ -67,6 +69,17 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             if (!student_id) return reply.code(400).send({ error: 'student_id required' });
             if (!isLinked(req.user.id, student_id)) return reply.code(403).send({ error: 'forbidden' });
             targetId = student_id;
+        }
+
+        if (from) {
+            const pending = "status IN ('plan_submitted', 'submitted', 'delete_requested')";
+            const tasks = db.prepare(
+                `SELECT * FROM tasks WHERE student_id = ? AND (day >= ? OR ${pending}) ORDER BY created_at ASC`
+            ).all(targetId, Number(from));
+            const older = db.prepare(
+                `SELECT MAX(day) AS day FROM tasks WHERE student_id = ? AND day < ? AND NOT ${pending}`
+            ).get(targetId, Number(from)) as { day: number | null };
+            return { tasks, older_day: older.day };
         }
 
         let sql = 'SELECT * FROM tasks WHERE student_id = ?';

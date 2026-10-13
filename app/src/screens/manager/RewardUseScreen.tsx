@@ -9,6 +9,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { api } from '../../api/client';
 import type { OwnedReward } from '../../store/appStore';
+import { WEEK_MS } from '../../lib/days';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'RewardUse'> };
@@ -40,13 +41,27 @@ export function RewardUseScreen({ navigation }: Props) {
     const [tab, setTab] = useState<FilterTab>('requested');
     const [processingId, setProcessingId] = useState<string | null>(null);
 
+    // 사용 완료된 보상은 최근 1주일치만 받고, "더 보기"로 1주일씩 넓힌다 (안 쓴 보상은 항상 전부)
+    const [usedSince, setUsedSince] = useState(() => Date.now() - WEEK_MS);
+    const [olderUsedAt, setOlderUsedAt] = useState<number | null>(null);
+
     const load = useCallback(async () => {
-        setRewards(await api<OwnedReward[]>('/rewards'));
-    }, []);
+        const res = await api<{ rewards: OwnedReward[]; older_used_at: number | null }>(
+            `/rewards?used_since=${usedSince}`
+        );
+        setRewards(res.rewards);
+        setOlderUsedAt(res.older_used_at);
+    }, [usedSince]);
 
     useEffect(() => {
         load().catch(() => {}).finally(() => setLoading(false));
-    }, []);
+    }, [load]);
+
+    const showOlderWeek = () => {
+        if (olderUsedAt == null) return;
+        // 바로 앞 1주일이 비어 있으면, 가장 가까운 기록이 포함되도록 더 앞으로
+        setUsedSince(Math.min(usedSince - WEEK_MS, olderUsedAt));
+    };
 
     useFocusEffect(useCallback(() => {
         load().catch(() => {});
@@ -127,9 +142,16 @@ export function RewardUseScreen({ navigation }: Props) {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
                 ListEmptyComponent={
                     <View style={styles.empty}>
-                        <Text style={styles.emptyText}>{EMPTY_TEXT[tab]}</Text>
+                        <Text style={styles.emptyText}>
+                            {tab === 'used' && olderUsedAt != null ? '최근 1주일 동안 사용 완료한 보상이 없어요' : EMPTY_TEXT[tab]}
+                        </Text>
                     </View>
                 }
+                ListFooterComponent={tab === 'used' && olderUsedAt != null ? (
+                    <TouchableOpacity style={styles.moreBtn} onPress={showOlderWeek}>
+                        <Text style={styles.moreBtnText}>이전 1주일 더 보기</Text>
+                    </TouchableOpacity>
+                ) : null}
                 renderItem={({ item }) => (
                     <View style={styles.card}>
                         <View style={styles.cardTop}>
@@ -239,6 +261,19 @@ const styles = StyleSheet.create({
         fontFamily: fontFamilies.body,
         fontSize: fontSizes.xs,
         color: colors.ink[300],
+    },
+    moreBtn: {
+        paddingVertical: 14,
+        alignItems: 'center',
+        borderRadius: radius.md,
+        borderWidth: 1,
+        borderColor: colors.ink[200],
+        marginTop: 4,
+    },
+    moreBtnText: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.sm,
+        color: colors.ink[500],
     },
     actionRow: {
         flexDirection: 'row',

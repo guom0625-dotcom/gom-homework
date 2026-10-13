@@ -9,7 +9,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { useAppStore, type Task } from '../../store/appStore';
-import { formatDay } from '../../lib/days';
+import { addDays, formatDay, todayKST } from '../../lib/days';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = {
@@ -32,19 +32,23 @@ export function ApprovalScreen({ navigation, route }: Props) {
     const { studentId, studentName } = route.params;
     const {
         selectedStudentTasks, fetchStudentTasks, approveTask, rejectTask, approvePlan, rejectPlan,
-        approveDelete, rejectDelete,
+        approveDelete, rejectDelete, selectedOlderDay,
     } = useAppStore();
+    // 최근 1주일치만 보여주고, 아래 "더 보기"로 1주일씩 넓힌다 (검토 대기 중인 할일은 날짜와 무관하게 항상 표시)
+    const [from, setFrom] = useState(() => addDays(todayKST(), -6));
     const [refreshing, setRefreshing] = useState(false);
     const [loadingId, setLoadingId] = useState<string | null>(null);
     const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
 
-    useEffect(() => {
-        fetchStudentTasks(studentId);
-    }, [studentId]);
-
     useFocusEffect(useCallback(() => {
-        fetchStudentTasks(studentId).catch(() => {});
-    }, [studentId]));
+        fetchStudentTasks(studentId, from).catch(() => {});
+    }, [studentId, from]));
+
+    const showOlderWeek = () => {
+        if (selectedOlderDay == null) return;
+        // 바로 앞 1주일이 비어 있으면, 할일이 있는 가장 가까운 날짜가 포함되도록 더 앞으로
+        setFrom(Math.min(addDays(from, -7), addDays(selectedOlderDay, -6)));
+    };
 
     // 검토 대기 있는 day는 자동 펼침, 수동 펼침도 유지
     useEffect(() => {
@@ -92,7 +96,7 @@ export function ApprovalScreen({ navigation, route }: Props) {
 
     const refresh = async () => {
         setRefreshing(true);
-        await fetchStudentTasks(studentId).catch(() => {});
+        await fetchStudentTasks(studentId, from).catch(() => {});
         setRefreshing(false);
     };
 
@@ -244,6 +248,11 @@ export function ApprovalScreen({ navigation, route }: Props) {
                         </View>
                     );
                 })}
+                {selectedOlderDay != null && (
+                    <TouchableOpacity style={styles.moreBtn} onPress={showOlderWeek}>
+                        <Text style={styles.moreBtnText}>이전 1주일 더 보기</Text>
+                    </TouchableOpacity>
+                )}
             </ScrollView>
         </SafeAreaView>
     );
@@ -457,6 +466,19 @@ const styles = StyleSheet.create({
         fontSize: fontSizes.sm,
         color: colors.coral[700],
         marginTop: 4,
+    },
+    moreBtn: {
+        paddingVertical: 14,
+        alignItems: 'center',
+        borderRadius: radius.md,
+        borderWidth: 1,
+        borderColor: colors.ink[200],
+        marginTop: 4,
+    },
+    moreBtnText: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.sm,
+        color: colors.ink[500],
     },
     taskActions: { gap: 6 },
     approveBtn: {

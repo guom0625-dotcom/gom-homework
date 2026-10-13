@@ -219,7 +219,7 @@ Base URL: `http://<서버-IP>:3100`
 | `GET` | `/students` | 연결된 학생 목록 + 다이아 잔고 + 오늘 할일 수 |
 | `POST` | `/students/:id/nudge` | 오늘 할일 미등록 학생에게 등록 알림 푸시 |
 | `GET` | `/students/:id/progress?month=YYYYMM` | 특정 학생의 월별 날짜 현황 |
-| `GET` | `/tasks?student_id=xxx` | 특정 학생 할일 목록 |
+| `GET` | `/tasks?student_id=xxx&from=YYYYMMDD` | 특정 학생의 `from` 이후 할일 + 검토 대기 중인 할일 → `{ tasks, older_day }` |
 | `POST` | `/tasks/:id/approve` | 할일 완료 승인 |
 | `POST` | `/tasks/:id/reject` | 할일 완료 반려 |
 | `POST` | `/tasks/:id/approve-plan` · `reject-plan` | 계획 승인 / 반려 |
@@ -229,7 +229,14 @@ Base URL: `http://<서버-IP>:3100`
 | `PATCH` | `/catalog/:id` | 보상 아이템 수정 |
 | `DELETE` | `/catalog/:id` | 보상 아이템 삭제 |
 | `GET` | `/rewards?status=use_requested` | 연결된 학생들의 보유 보상 (상태별 필터) |
+| `GET` | `/rewards?used_since=<ms>` | 안 쓴 보상 전부 + 그 시각 이후 사용 완료분 → `{ rewards, older_used_at }` (학생도 동일) |
 | `POST` | `/rewards/:id/complete` | 사용 요청된 보상을 사용 완료 처리 |
+
+### 기록 보관
+
+- 할일·보상 기록은 서버에서 지우지 않는다 (삭제 승인된 할일만 실제 삭제).
+- 화면에는 최근 1주일치만 보여주고, 목록 아래 "이전 1주일 더 보기"로 1주일씩 더 불러온다.
+  매니저 검토를 기다리는 할일과 아직 쓰지 않은 보상은 기간과 무관하게 항상 보인다.
 
 ### 보상 (다이아)
 

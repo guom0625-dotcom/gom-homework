@@ -81,8 +81,10 @@ export function registerRewardRoutes(app: FastifyInstance, db: Db, auth: AuthHan
     });
 
     // GET /rewards?status=xxx  (student: 내 보유 보상 / manager: 연결된 학생들의 보유 보상)
+    // GET /rewards?used_since=<ms> → { rewards, older_used_at }
+    //   아직 쓰지 않은 보상 전부 + used_since 이후에 사용 완료된 보상. older_used_at = 그보다 앞선 가장 최근 사용 완료 시각(없으면 null)
     app.get('/rewards', { preHandler: auth }, async (req) => {
-        const { status } = req.query as { status?: string };
+        const { status, used_since } = req.query as { status?: string; used_since?: string };
         const params: unknown[] = [req.user.id];
 
         let sql = req.user.role === 'student'
@@ -92,6 +94,17 @@ export function registerRewardRoutes(app: FastifyInstance, db: Db, auth: AuthHan
                JOIN users u ON u.id = o.student_id
                JOIN manager_student_link l ON l.student_id = o.student_id
                WHERE l.manager_id = ?`;
+        if (used_since) {
+            const since = Number(used_since);
+            const rewards = db.prepare(
+                `${sql} AND (o.status != 'used' OR o.used_at >= ?) ORDER BY o.purchased_at DESC`
+            ).all(...params, since);
+            const older = db.prepare(
+                `SELECT MAX(x.used_at) AS used_at FROM (${sql} AND o.status = 'used' AND o.used_at < ?) x`
+            ).get(...params, since) as { used_at: number | null };
+            return { rewards, older_used_at: older.used_at };
+        }
+
         if (status) { sql += ' AND o.status = ?'; params.push(status); }
         sql += ' ORDER BY o.purchased_at DESC';
 
