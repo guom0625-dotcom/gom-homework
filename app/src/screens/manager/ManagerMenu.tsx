@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
-import type { OwnedReward } from '../../store/appStore';
+import { useAppStore, type OwnedReward } from '../../store/appStore';
 import { useAuthStore } from '../../store/authStore';
 import { api } from '../../api/client';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
@@ -18,12 +18,32 @@ export function ManagerMenuScreen({ navigation }: Props) {
     const logout = useAuthStore(s => s.logout);
     const [codeLoading, setCodeLoading] = useState(false);
     const [pendingUse, setPendingUse] = useState(0);
+    const { students, fetchStudents } = useAppStore();
+    const [loginCodeFor, setLoginCodeFor] = useState<string | null>(null);
 
     useFocusEffect(useCallback(() => {
         api<OwnedReward[]>('/rewards?status=use_requested')
             .then(list => setPendingUse(list.length))
             .catch(() => {});
+        fetchStudents().catch(() => {});
     }, []));
+
+    // 로그아웃했거나 폰을 바꾼 학생이 원래 계정으로 다시 들어갈 코드
+    const handleLoginCode = async (studentId: string, name: string) => {
+        setLoginCodeFor(studentId);
+        try {
+            const res = await api<{ code: string }>(`/students/${studentId}/login-code`, { method: 'POST' });
+            Alert.alert(
+                `${name} 재로그인 코드`,
+                `코드: ${res.code}\n\n${name}의 폰 첫 화면에서 "전에 쓰던 계정이 있어요"를 누르고 입력하세요.\n5분 안에 입력해야 해요. 예전 폰에서는 자동으로 로그아웃돼요.`,
+                [{ text: '확인' }]
+            );
+        } catch {
+            Alert.alert('오류', '코드 생성에 실패했어요');
+        } finally {
+            setLoginCodeFor(null);
+        }
+    };
 
     const handleGenerateCode = async () => {
         setCodeLoading(true);
@@ -82,6 +102,16 @@ export function ManagerMenuScreen({ navigation }: Props) {
                     loading={codeLoading}
                     onPress={handleGenerateCode}
                 />
+                {students.map(st => (
+                    <MenuItem
+                        key={st.id}
+                        icon="🔑"
+                        label={`${st.name} 재로그인 코드`}
+                        desc="로그아웃했거나 폰을 바꿨을 때 원래 계정으로 다시 들어가기"
+                        loading={loginCodeFor === st.id}
+                        onPress={() => handleLoginCode(st.id, st.name)}
+                    />
+                ))}
 
                 <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
                     <Text style={styles.logoutText}>로그아웃</Text>

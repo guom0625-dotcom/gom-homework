@@ -19,6 +19,7 @@ interface AuthState {
     init: () => Promise<void>;
     signup: (name: string, role: 'manager' | 'student') => Promise<void>;
     loginWithKey: (key: string) => Promise<void>;
+    recoverWithCode: (code: string) => Promise<void>;
     logout: () => Promise<void>;
 }
 
@@ -70,6 +71,17 @@ export const useAuthStore = create<AuthState>((set) => ({
             setApiKey(null);
             throw e;
         }
+    },
+
+    // 매니저가 발급한 재로그인 코드로 기존 학생 계정에 다시 들어간다
+    recoverWithCode: async (code) => {
+        const res = await api<AuthUser & { key: string }>('/auth/recover', {
+            method: 'POST',
+            body: JSON.stringify({ code: code.trim() }),
+        });
+        await SecureStore.setItemAsync(STORE_KEY, res.key);
+        setApiKey(res.key);
+        set({ key: res.key, user: { id: res.id, name: res.name, role: res.role }, needsPairing: false });
     },
 
     logout: async () => {

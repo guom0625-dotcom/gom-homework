@@ -191,6 +191,8 @@ Base URL: `http://<서버-IP>:3100`
 | `POST` | `/auth/signup` | 회원가입 → `{ key }` 반환 |
 | `POST` | `/auth/pairing-code` | 매니저 → 6자리 코드 생성 (5분 유효) |
 | `POST` | `/auth/redeem` | 학생 → 코드 입력으로 매니저 연결 |
+| `POST` | `/students/:id/login-code` | 매니저 → 기존 학생 계정 재로그인용 6자리 코드 (5분 유효) |
+| `POST` | `/auth/recover` | 재로그인 코드 → 그 학생 계정의 새 키 발급 (예전 키는 무효화) |
 
 모든 인증 필요 API: `Authorization: Bearer <key>` 헤더 필수.
 

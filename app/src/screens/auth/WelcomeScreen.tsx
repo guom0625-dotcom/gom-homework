@@ -16,8 +16,11 @@ export function WelcomeScreen({ navigation }: Props) {
     const [role, setRole] = useState<'manager' | 'student'>('student');
     const [name, setName] = useState('');
     const [managerKey, setManagerKey] = useState('');
+    // 학생: 새로 시작(false) / 이미 있는 계정으로 다시 들어가기(true)
+    const [returning, setReturning] = useState(false);
+    const [loginCode, setLoginCode] = useState('');
     const [loading, setLoading] = useState(false);
-    const { signup, loginWithKey } = useAuthStore();
+    const { signup, loginWithKey, recoverWithCode } = useAuthStore();
 
     const handleStart = async () => {
         setLoading(true);
@@ -25,6 +28,9 @@ export function WelcomeScreen({ navigation }: Props) {
             if (role === 'manager') {
                 if (!managerKey.trim()) { Alert.alert('키를 입력해주세요'); return; }
                 await loginWithKey(managerKey);
+            } else if (returning) {
+                if (loginCode.trim().length !== 6) { Alert.alert('6자리 코드를 입력해주세요'); return; }
+                await recoverWithCode(loginCode);
             } else {
                 if (!name.trim()) { Alert.alert('이름을 입력해주세요'); return; }
                 await signup(name.trim(), 'student');
@@ -32,7 +38,10 @@ export function WelcomeScreen({ navigation }: Props) {
             }
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : '오류가 발생했어요';
-            Alert.alert('오류', msg);
+            Alert.alert('오류',
+                msg === 'invalid_or_expired_code' ? '코드가 틀렸거나 시간이 지났어요. 매니저에게 새 코드를 받아주세요'
+                : msg === 'too_many_attempts' ? '잠시 후 다시 시도해주세요'
+                : msg);
         } finally {
             setLoading(false);
         }
@@ -70,7 +79,22 @@ export function WelcomeScreen({ navigation }: Props) {
                             ))}
                         </View>
 
-                        {role === 'student' ? (
+                        {role === 'student' && returning ? (
+                            <>
+                                <Text style={[styles.label, { marginTop: 20 }]}>재로그인 코드</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="매니저가 알려준 6자리 숫자"
+                                    placeholderTextColor={colors.ink[300]}
+                                    value={loginCode}
+                                    onChangeText={setLoginCode}
+                                    keyboardType="number-pad"
+                                    maxLength={6}
+                                    returnKeyType="done"
+                                    onSubmitEditing={handleStart}
+                                />
+                            </>
+                        ) : role === 'student' ? (
                             <>
                                 <Text style={[styles.label, { marginTop: 20 }]}>이름</Text>
                                 <TextInput
@@ -108,15 +132,24 @@ export function WelcomeScreen({ navigation }: Props) {
                             {loading
                                 ? <ActivityIndicator color="#fff" />
                                 : <Text style={styles.startBtnText}>
-                                    {role === 'manager' ? '로그인 🔑' : '시작하기 🚀'}
+                                    {role === 'manager' || returning ? '로그인 🔑' : '시작하기 🚀'}
                                 </Text>
                             }
                         </TouchableOpacity>
 
                         {role === 'student' && (
-                            <Text style={styles.hint}>
-                                시작 후 매니저가 준 6자리 코드로 연결해요
-                            </Text>
+                            <>
+                                <Text style={styles.hint}>
+                                    {returning
+                                        ? '매니저 앱의 관리 메뉴에서 재로그인 코드를 받을 수 있어요'
+                                        : '시작 후 매니저가 준 6자리 코드로 연결해요'}
+                                </Text>
+                                <TouchableOpacity onPress={() => setReturning(r => !r)} style={styles.switchLink}>
+                                    <Text style={styles.switchLinkText}>
+                                        {returning ? '처음이에요 — 새로 시작하기' : '전에 쓰던 계정이 있어요 — 다시 들어가기'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </>
                         )}
                     </View>
                 </ScrollView>
@@ -138,6 +171,13 @@ const styles = StyleSheet.create({
         paddingVertical: 40,
     },
     emoji: { fontSize: 64, marginBottom: 8 },
+    switchLink: { marginTop: 14, alignItems: 'center', paddingVertical: 6 },
+    switchLinkText: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.sm,
+        color: colors.ocean[700],
+        textDecorationLine: 'underline',
+    },
     title: {
         fontFamily: fontFamilies.display,
         fontSize: fontSizes['6xl'],

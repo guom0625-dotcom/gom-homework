@@ -80,7 +80,7 @@ export function ProfileScreen() {
     };
 
     const handleLogout = () => {
-        Alert.alert('로그아웃', '정말 로그아웃할까요?', [
+        Alert.alert('로그아웃', '다시 들어오려면 매니저에게 재로그인 코드를 받아야 해요. 로그아웃할까요?', [
             { text: '취소', style: 'cancel' },
             { text: '로그아웃', style: 'destructive', onPress: logout },
         ]);
