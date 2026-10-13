@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import Constants from 'expo-constants';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { useAppStore, type OwnedReward } from '../../store/appStore';
@@ -157,6 +158,8 @@ export function ManagerMenuScreen({ navigation }: Props) {
                 <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
                     <Text style={styles.logoutText}>로그아웃</Text>
                 </TouchableOpacity>
+
+                <Text style={styles.versionText}>v{Constants.expoConfig?.version ?? '—'}</Text>
             </ScrollView>
         </SafeAreaView>
     );
@@ -245,6 +248,13 @@ const styles = StyleSheet.create({
         borderRadius: radius.md,
         borderWidth: 1,
         borderColor: colors.ink[200],
+    },
+    versionText: {
+        fontFamily: fontFamilies.body,
+        fontSize: fontSizes.xs,
+        color: colors.ink[300],
+        textAlign: 'center',
+        marginTop: 6,
     },
     logoutText: {
         fontFamily: fontFamilies.bodyMed,
