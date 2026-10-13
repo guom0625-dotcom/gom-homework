@@ -12,7 +12,7 @@ import { registerMeRoutes } from './routes/me.ts';
 import { registerTaskRoutes } from './routes/tasks.ts';
 import { registerRulesRoutes } from './routes/rules.ts';
 import { registerCatalogRoutes } from './routes/catalog.ts';
-import { registerSpendRoutes } from './routes/spendRequests.ts';
+import { registerRewardRoutes } from './routes/rewards.ts';
 import { registerStudentRoutes } from './routes/students.ts';
 import { DAY_REWARD, settlePastDays } from './lib/gems.ts';
 import { todayKST } from './lib/days.ts';
@@ -65,7 +65,7 @@ registerMeRoutes(app, db, auth);
 registerTaskRoutes(app, db, auth);
 registerRulesRoutes(app, db, auth);
 registerCatalogRoutes(app, db, auth);
-registerSpendRoutes(app, db, auth);
+registerRewardRoutes(app, db, auth);
 registerStudentRoutes(app, db, auth);
 
 app.get('/health', async () => ({ ok: true, time: Date.now() }));

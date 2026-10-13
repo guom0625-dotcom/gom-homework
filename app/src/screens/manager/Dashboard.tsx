@@ -9,7 +9,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { useAuthStore } from '../../store/authStore';
 import { Character } from '../../components/Character';
-import { useAppStore, type SpendRequest } from '../../store/appStore';
+import { useAppStore, type OwnedReward } from '../../store/appStore';
 import { api } from '../../api/client';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
@@ -20,7 +20,7 @@ export function DashboardScreen({ navigation }: Props) {
     const { students, fetchStudents } = useAppStore();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [pendingSpend, setPendingSpend] = useState(0);
+    const [pendingUse, setPendingUse] = useState(0);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState('');
     const [nudgingId, setNudgingId] = useState<string | null>(null);
@@ -29,20 +29,20 @@ export function DashboardScreen({ navigation }: Props) {
         fetchStudents().finally(() => setLoading(false));
     }, []);
 
-    // 관리 메뉴 안으로 들어간 보상 요청을 놓치지 않도록 대기 건수를 버튼에 표시
-    const fetchPendingSpend = useCallback(() =>
-        api<SpendRequest[]>('/spend-requests?status=pending')
-            .then(list => setPendingSpend(list.length))
+    // 관리 메뉴 안에 있는 보상 사용 요청을 놓치지 않도록 대기 건수를 버튼에 표시
+    const fetchPendingUse = useCallback(() =>
+        api<OwnedReward[]>('/rewards?status=use_requested')
+            .then(list => setPendingUse(list.length))
             .catch(() => {}), []);
 
     useFocusEffect(useCallback(() => {
         fetchStudents().catch(() => {});
-        fetchPendingSpend();
+        fetchPendingUse();
     }, []));
 
     const refresh = useCallback(async () => {
         setRefreshing(true);
-        await Promise.all([fetchStudents().catch(() => {}), fetchPendingSpend()]);
+        await Promise.all([fetchStudents().catch(() => {}), fetchPendingUse()]);
         setRefreshing(false);
     }, []);
 
@@ -98,9 +98,9 @@ export function DashboardScreen({ navigation }: Props) {
                 </View>
                 <TouchableOpacity onPress={() => navigation.navigate('ManagerMenu')} style={styles.menuBtn}>
                     <Text style={styles.menuText}>⚙️ 관리</Text>
-                    {pendingSpend > 0 && (
+                    {pendingUse > 0 && (
                         <View style={styles.menuBadge}>
-                            <Text style={styles.menuBadgeText}>{pendingSpend}</Text>
+                            <Text style={styles.menuBadgeText}>{pendingUse}</Text>
                         </View>
                     )}
                 </TouchableOpacity>

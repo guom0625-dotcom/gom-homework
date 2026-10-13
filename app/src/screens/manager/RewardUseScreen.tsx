@@ -8,41 +8,44 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { api } from '../../api/client';
-import type { SpendRequest } from '../../store/appStore';
+import type { OwnedReward } from '../../store/appStore';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
-type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'SpendApproval'> };
+type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'RewardUse'> };
 
-type FilterTab = 'pending' | 'done';
+type FilterTab = 'requested' | 'owned' | 'used';
 
-function StatusBadge({ status }: { status: SpendRequest['status'] }) {
-    const map = {
-        pending: { label: '대기중', bg: colors.sky[100], text: colors.sky[700] },
-        approved: { label: '승인됨', bg: colors.ocean[50], text: colors.ocean[700] },
-        rejected: { label: '거절됨', bg: colors.paper2, text: colors.coral[500] },
-    };
-    const s = map[status];
-    return (
-        <View style={[styles.badge, { backgroundColor: s.bg }]}>
-            <Text style={[styles.badgeText, { color: s.text }]}>{s.label}</Text>
-        </View>
-    );
+const TAB_LABEL: Record<FilterTab, string> = { requested: '사용 요청', owned: '보유중', used: '사용 완료' };
+const TAB_STATUS: Record<FilterTab, OwnedReward['status']> = {
+    requested: 'use_requested', owned: 'owned', used: 'used',
+};
+const EMPTY_TEXT: Record<FilterTab, string> = {
+    requested: '사용 요청이 없어요',
+    owned: '학생이 아직 쓰지 않고 가진 보상이 없어요',
+    used: '사용 완료한 보상이 없어요',
+};
+
+function formatTime(ts: number | null): string {
+    if (!ts) return '';
+    return new Date(ts).toLocaleDateString('ko-KR', {
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
 }
 
-export function SpendApprovalScreen({ navigation }: Props) {
-    const [requests, setRequests] = useState<SpendRequest[]>([]);
+// 학생이 구매한 보상 목록. 학생이 "사용"을 누른 보상은 실제로 해준 뒤 여기서 사용 완료 처리한다
+export function RewardUseScreen({ navigation }: Props) {
+    const [rewards, setRewards] = useState<OwnedReward[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [tab, setTab] = useState<FilterTab>('pending');
+    const [tab, setTab] = useState<FilterTab>('requested');
     const [processingId, setProcessingId] = useState<string | null>(null);
 
     const load = useCallback(async () => {
-        const data = await api<SpendRequest[]>('/spend-requests');
-        setRequests(data);
+        setRewards(await api<OwnedReward[]>('/rewards'));
     }, []);
 
     useEffect(() => {
-        load().finally(() => setLoading(false));
+        load().catch(() => {}).finally(() => setLoading(false));
     }, []);
 
     useFocusEffect(useCallback(() => {
@@ -55,51 +58,24 @@ export function SpendApprovalScreen({ navigation }: Props) {
         setRefreshing(false);
     }, [load]);
 
-    const handleApprove = (req: SpendRequest) => {
+    const handleComplete = (reward: OwnedReward) => {
         Alert.alert(
-            '요청 승인',
-            `"${req.catalog_title}" 요청을 승인할까요?\n${req.student_name ?? '학생'}의 다이아가 차감됩니다.`,
+            '사용 완료',
+            `${reward.student_name ?? '학생'}에게 "${reward.title}" 보상을 해줬나요?`,
             [
-                { text: '취소', style: 'cancel' },
+                { text: '아직', style: 'cancel' },
                 {
-                    text: '승인',
+                    text: '사용 완료',
                     onPress: async () => {
-                        setProcessingId(req.id);
+                        setProcessingId(reward.id);
                         try {
-                            await api(`/spend-requests/${req.id}/approve`, { method: 'POST' });
-                            setRequests(prev =>
-                                prev.map(r => r.id === req.id ? { ...r, status: 'approved' } : r)
-                            );
-                        } catch (e: unknown) {
-                            const msg = e instanceof Error ? e.message : '오류';
-                            Alert.alert('오류', msg === 'insufficient_gems' ? '다이아가 부족해요' : msg);
-                        } finally {
-                            setProcessingId(null);
-                        }
-                    },
-                },
-            ],
-        );
-    };
-
-    const handleReject = (req: SpendRequest) => {
-        Alert.alert(
-            '요청 거절',
-            `"${req.catalog_title}" 요청을 거절할까요?`,
-            [
-                { text: '취소', style: 'cancel' },
-                {
-                    text: '거절',
-                    style: 'destructive',
-                    onPress: async () => {
-                        setProcessingId(req.id);
-                        try {
-                            await api(`/spend-requests/${req.id}/reject`, { method: 'POST' });
-                            setRequests(prev =>
-                                prev.map(r => r.id === req.id ? { ...r, status: 'rejected' } : r)
+                            await api(`/rewards/${reward.id}/complete`, { method: 'POST' });
+                            setRewards(prev =>
+                                prev.map(r => r.id === reward.id ? { ...r, status: 'used', used_at: Date.now() } : r)
                             );
                         } catch (e: unknown) {
                             Alert.alert('오류', e instanceof Error ? e.message : '오류');
+                            load().catch(() => {});
                         } finally {
                             setProcessingId(null);
                         }
@@ -109,11 +85,8 @@ export function SpendApprovalScreen({ navigation }: Props) {
         );
     };
 
-    const displayed = requests.filter(r =>
-        tab === 'pending' ? r.status === 'pending' : r.status !== 'pending'
-    );
-
-    const pendingCount = requests.filter(r => r.status === 'pending').length;
+    const displayed = rewards.filter(r => r.status === TAB_STATUS[tab]);
+    const requestedCount = rewards.filter(r => r.status === 'use_requested').length;
 
     if (loading) {
         return (
@@ -129,25 +102,22 @@ export function SpendApprovalScreen({ navigation }: Props) {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
                     <Text style={styles.backText}>‹</Text>
                 </TouchableOpacity>
-                <Text style={styles.title}>보상 요청</Text>
+                <Text style={styles.title}>보상 사용</Text>
                 <View style={{ width: 52 }} />
             </View>
 
             <View style={styles.tabs}>
-                <TouchableOpacity
-                    style={[styles.tab, tab === 'pending' && styles.tabActive]}
-                    onPress={() => setTab('pending')}
-                >
-                    <Text style={[styles.tabText, tab === 'pending' && styles.tabTextActive]}>
-                        대기중 {pendingCount > 0 ? `(${pendingCount})` : ''}
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.tab, tab === 'done' && styles.tabActive]}
-                    onPress={() => setTab('done')}
-                >
-                    <Text style={[styles.tabText, tab === 'done' && styles.tabTextActive]}>처리됨</Text>
-                </TouchableOpacity>
+                {(['requested', 'owned', 'used'] as const).map(t => (
+                    <TouchableOpacity
+                        key={t}
+                        style={[styles.tab, tab === t && styles.tabActive]}
+                        onPress={() => setTab(t)}
+                    >
+                        <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
+                            {TAB_LABEL[t]}{t === 'requested' && requestedCount > 0 ? ` (${requestedCount})` : ''}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
             </View>
 
             <FlatList
@@ -157,42 +127,30 @@ export function SpendApprovalScreen({ navigation }: Props) {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
                 ListEmptyComponent={
                     <View style={styles.empty}>
-                        <Text style={styles.emptyText}>
-                            {tab === 'pending' ? '대기 중인 요청이 없어요' : '처리된 요청이 없어요'}
-                        </Text>
+                        <Text style={styles.emptyText}>{EMPTY_TEXT[tab]}</Text>
                     </View>
                 }
                 renderItem={({ item }) => (
                     <View style={styles.card}>
                         <View style={styles.cardTop}>
                             <Text style={styles.studentName}>{item.student_name ?? '학생'}</Text>
-                            <StatusBadge status={item.status} />
+                            <Text style={styles.dateText}>💎 {item.cost}</Text>
                         </View>
-                        <Text style={styles.itemTitle}>{item.catalog_title}</Text>
+                        <Text style={styles.itemTitle}>{item.title}</Text>
+                        {item.description ? <Text style={styles.itemDesc}>{item.description}</Text> : null}
                         <Text style={styles.dateText}>
-                            {new Date(item.created_at).toLocaleDateString('ko-KR', {
-                                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                            })}
+                            {item.status === 'used' ? `사용 완료 ${formatTime(item.used_at)}`
+                                : item.status === 'use_requested' ? `사용 요청 ${formatTime(item.use_requested_at)}`
+                                : `구매 ${formatTime(item.purchased_at)}`}
                         </Text>
-                        {item.status === 'pending' && (
+                        {item.status === 'use_requested' && (
                             <View style={styles.actionRow}>
                                 {processingId === item.id ? (
                                     <ActivityIndicator color={colors.ocean[500]} />
                                 ) : (
-                                    <>
-                                        <TouchableOpacity
-                                            style={styles.rejectBtn}
-                                            onPress={() => handleReject(item)}
-                                        >
-                                            <Text style={styles.rejectBtnText}>거절</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={styles.approveBtn}
-                                            onPress={() => handleApprove(item)}
-                                        >
-                                            <Text style={styles.approveBtnText}>승인</Text>
-                                        </TouchableOpacity>
-                                    </>
+                                    <TouchableOpacity style={styles.approveBtn} onPress={() => handleComplete(item)}>
+                                        <Text style={styles.approveBtnText}>사용 완료</Text>
+                                    </TouchableOpacity>
                                 )}
                             </View>
                         )}
@@ -266,14 +224,10 @@ const styles = StyleSheet.create({
         fontSize: fontSizes.sm,
         color: colors.ink[700],
     },
-    badge: {
-        borderRadius: radius.pill,
-        paddingHorizontal: 9,
-        paddingVertical: 3,
-    },
-    badgeText: {
-        fontFamily: fontFamilies.bodyMed,
-        fontSize: fontSizes.xs,
+    itemDesc: {
+        fontFamily: fontFamilies.body,
+        fontSize: fontSizes.sm,
+        color: colors.ink[500],
     },
     itemTitle: {
         fontFamily: fontFamilies.bodyBold,
@@ -291,18 +245,6 @@ const styles = StyleSheet.create({
         gap: 8,
         marginTop: 8,
         justifyContent: 'flex-end',
-    },
-    rejectBtn: {
-        borderRadius: radius.pill,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderWidth: 1,
-        borderColor: colors.ink[200],
-    },
-    rejectBtnText: {
-        fontFamily: fontFamilies.bodyMed,
-        fontSize: fontSizes.sm,
-        color: colors.ink[500],
     },
     approveBtn: {
         backgroundColor: colors.ocean[500],

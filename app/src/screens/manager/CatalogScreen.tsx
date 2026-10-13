@@ -17,10 +17,17 @@ type FormData = {
     title: string;
     description: string;
     cost: string;
+    kind: CatalogItem['kind'];
+};
+
+const KIND_LABEL: Record<CatalogItem['kind'], string> = { once: '1회성', always: '상시' };
+const KIND_DESC: Record<CatalogItem['kind'], string> = {
+    once: '한 번 팔리면 상점에서 사라져요',
+    always: '상점에 계속 남아 여러 번 살 수 있어요',
 };
 
 const EMPTY_FORM: FormData = {
-    title: '', description: '', cost: '1',
+    title: '', description: '', cost: '1', kind: 'always',
 };
 
 function formFromItem(item: CatalogItem): FormData {
@@ -28,6 +35,7 @@ function formFromItem(item: CatalogItem): FormData {
         title: item.title,
         description: item.description ?? '',
         cost: String(item.cost),
+        kind: item.kind,
     };
 }
 
@@ -37,6 +45,9 @@ function CostRow({ item }: { item: CatalogItem }) {
             <View style={styles.costChip}>
                 <Gem size={13} />
                 <Text style={styles.costNum}>{item.cost}</Text>
+            </View>
+            <View style={[styles.costChip, item.kind === 'once' && styles.kindChipOnce]}>
+                <Text style={styles.costNum}>{KIND_LABEL[item.kind]}</Text>
             </View>
         </View>
     );
@@ -94,6 +105,7 @@ export function CatalogScreen({ navigation }: Props) {
             title: form.title.trim(),
             description: form.description.trim() || null,
             cost,
+            kind: form.kind,
         };
         setSaving(true);
         try {
@@ -249,6 +261,22 @@ export function CatalogScreen({ navigation }: Props) {
                                 placeholderTextColor={colors.ink[300]}
                             />
                         </View>
+
+                        <Text style={styles.fieldLabel}>판매 방식</Text>
+                        <View style={styles.kindRow}>
+                            {(['always', 'once'] as const).map(k => (
+                                <TouchableOpacity
+                                    key={k}
+                                    style={[styles.kindBtn, form.kind === k && styles.kindBtnActive]}
+                                    onPress={() => setForm(f => ({ ...f, kind: k }))}
+                                >
+                                    <Text style={[styles.kindBtnText, form.kind === k && styles.kindBtnTextActive]}>
+                                        {KIND_LABEL[k]}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                        <Text style={styles.kindDesc}>{KIND_DESC[form.kind]}</Text>
                     </ScrollView>
                 </SafeAreaView>
             </Modal>
@@ -405,6 +433,30 @@ const styles = StyleSheet.create({
         borderColor: colors.ink[100],
     },
     inputMulti: { height: 80, textAlignVertical: 'top' },
+    kindChipOnce: { backgroundColor: colors.sun[300] },
+    kindRow: { flexDirection: 'row', gap: 8 },
+    kindBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        alignItems: 'center',
+        borderRadius: radius.md,
+        backgroundColor: colors.card,
+        borderWidth: 1.5,
+        borderColor: colors.ink[200],
+    },
+    kindBtnActive: { borderColor: colors.ocean[500], backgroundColor: colors.ocean[50] },
+    kindBtnText: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.base,
+        color: colors.ink[500],
+    },
+    kindBtnTextActive: { color: colors.ocean[700] },
+    kindDesc: {
+        fontFamily: fontFamilies.body,
+        fontSize: fontSizes.sm,
+        color: colors.ink[500],
+        marginTop: 6,
+    },
     gemRow: {
         flexDirection: 'row',
         alignItems: 'center',

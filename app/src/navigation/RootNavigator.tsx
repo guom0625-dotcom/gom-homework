@@ -15,7 +15,7 @@ import { DashboardScreen } from '../screens/manager/Dashboard';
 import { ApprovalScreen } from '../screens/manager/Approval';
 import { ManagerMenuScreen } from '../screens/manager/ManagerMenu';
 import { CatalogScreen } from '../screens/manager/CatalogScreen';
-import { SpendApprovalScreen } from '../screens/manager/SpendApprovalScreen';
+import { RewardUseScreen } from '../screens/manager/RewardUseScreen';
 import { SpendScreen } from '../screens/student/SpendScreen';
 import { ProfileScreen } from '../screens/student/ProfileScreen';
 import { colors } from '../theme';
@@ -39,7 +39,7 @@ export type ManagerStackParams = {
     Approval: { studentId: string; studentName: string };
     ManagerMenu: undefined;
     Catalog: undefined;
-    SpendApproval: undefined;
+    RewardUse: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
@@ -66,7 +66,7 @@ function ManagerNavigator() {
             <ManagerStack.Screen name="Approval" component={ApprovalScreen} />
             <ManagerStack.Screen name="ManagerMenu" component={ManagerMenuScreen} />
             <ManagerStack.Screen name="Catalog" component={CatalogScreen} />
-            <ManagerStack.Screen name="SpendApproval" component={SpendApprovalScreen} />
+            <ManagerStack.Screen name="RewardUse" component={RewardUseScreen} />
         </ManagerStack.Navigator>
     );
 }

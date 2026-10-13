@@ -8,6 +8,8 @@ const ItemBody = z.object({
     title: z.string().min(1).max(100),
     description: z.string().max(500).nullable().optional(),
     cost: z.number().int().min(1),
+    // once = 1회성(한 번 팔리면 상점에서 사라짐), always = 상시
+    kind: z.enum(['once', 'always']).optional(),
 });
 
 export function registerCatalogRoutes(app: FastifyInstance, db: Db, auth: AuthHandler): void {
@@ -38,9 +40,12 @@ export function registerCatalogRoutes(app: FastifyInstance, db: Db, auth: AuthHa
         const now = Date.now();
         db.prepare(`
             INSERT INTO reward_catalog
-                (id, manager_id, title, description, cost, active, created_at)
-            VALUES (?, ?, ?, ?, ?, 1, ?)
-        `).run(id, req.user.id, body.data.title, body.data.description ?? null, body.data.cost, now);
+                (id, manager_id, title, description, cost, kind, active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+        `).run(
+            id, req.user.id, body.data.title, body.data.description ?? null,
+            body.data.cost, body.data.kind ?? 'always', now
+        );
 
         return reply.code(201).send(db.prepare('SELECT * FROM reward_catalog WHERE id = ?').get(id));
     });

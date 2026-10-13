@@ -29,18 +29,23 @@ export interface CatalogItem {
     title: string;
     description: string | null;
     cost: number;
+    kind: 'once' | 'always';  // once = 1회성(팔리면 상점에서 사라짐), always = 상시
     active: number;
     created_at: number;
 }
 
-export interface SpendRequest {
+// 학생이 구매해 보유 중인 보상. owned → (학생 사용 요청) use_requested → (매니저 사용 완료) used
+export interface OwnedReward {
     id: string;
     student_id: string;
     catalog_id: string;
-    catalog_title: string;
-    status: 'pending' | 'approved' | 'rejected';
-    reviewed_at: number | null;
-    created_at: number;
+    title: string;
+    description: string | null;
+    cost: number;
+    status: 'owned' | 'use_requested' | 'used';
+    purchased_at: number;
+    use_requested_at: number | null;
+    used_at: number | null;
     student_name?: string;
 }
 
@@ -89,10 +94,13 @@ interface AppState {
 
     updateProfile: (character: CharacterType, avatar?: string | null) => Promise<void>;
 
-    // student — catalog & spend
+    // student — 상점 & 보유 보상
     catalog: CatalogItem[];
+    rewards: OwnedReward[];
     fetchCatalog: () => Promise<void>;
-    requestSpend: (catalogId: string) => Promise<void>;
+    fetchRewards: () => Promise<void>;
+    buyReward: (catalogId: string) => Promise<void>;
+    requestUseReward: (id: string) => Promise<void>;
 
     // manager
     students: StudentSummary[];
@@ -130,6 +138,7 @@ const initialState = {
     character: 'bear' as CharacterType,
     avatar: null as string | null,
     catalog: [] as CatalogItem[],
+    rewards: [] as OwnedReward[],
     students: [],
     selectedStudentTasks: [],
 };
@@ -206,12 +215,22 @@ export const useAppStore = create<AppState>((set, get) => {
         set({ catalog });
     },
 
-    requestSpend: async (catalogId) => {
-        // 요청 시점에는 보석이 차감되지 않음 (매니저 승인 시 차감) — 잔고 재호출 불필요
-        await api('/spend-requests', {
-            method: 'POST',
-            body: JSON.stringify({ catalog_id: catalogId }),
-        });
+    fetchRewards: async () => {
+        const rewards = await api<OwnedReward[]>('/rewards');
+        set({ rewards });
+    },
+
+    // 구매 즉시 다이아가 차감되고 보상을 보유한다. 1회성 보상은 상점에서 사라지므로 목록도 다시 받는다
+    buyReward: async (catalogId) => {
+        await api(`/catalog/${catalogId}/buy`, { method: 'POST' });
+        await Promise.all([get().fetchMe(), get().fetchCatalog(), get().fetchRewards()]);
+    },
+
+    requestUseReward: async (id) => {
+        await api(`/rewards/${id}/use`, { method: 'POST' });
+        set(st => ({
+            rewards: st.rewards.map(r => r.id === id ? { ...r, status: 'use_requested' as const } : r),
+        }));
     },
 
     fetchStudents: async () => {

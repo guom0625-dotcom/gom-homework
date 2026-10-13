@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     View, Text, FlatList, StyleSheet, TouchableOpacity,
     ActivityIndicator, Alert, RefreshControl,
@@ -7,22 +7,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
-import { useAppStore, type CatalogItem } from '../../store/appStore';
+import { useAppStore, type CatalogItem, type OwnedReward } from '../../store/appStore';
 import { Gem } from '../../components/Gem';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<StudentStackParams, 'Spend'> };
 
-function GemBalanceBar({ diamonds }: { diamonds: number }) {
-    return (
-        <View style={styles.balanceBar}>
-            <View style={styles.balanceChip}>
-                <Gem size={16} />
-                <Text style={styles.balanceNum}>{diamonds}</Text>
-            </View>
-        </View>
-    );
-}
+type Tab = 'shop' | 'mine';
 
 function CostChips({ item }: { item: CatalogItem }) {
     return (
@@ -31,51 +22,66 @@ function CostChips({ item }: { item: CatalogItem }) {
                 <Gem size={14} />
                 <Text style={styles.costNum}>{item.cost}</Text>
             </View>
+            {item.kind === 'once' && (
+                <View style={[styles.costChip, styles.onceChip]}>
+                    <Text style={styles.costNum}>딱 1번</Text>
+                </View>
+            )}
         </View>
     );
 }
 
+const REWARD_STATUS: Record<OwnedReward['status'], string> = {
+    owned: '보유중',
+    use_requested: '⏳ 사용 요청중',
+    used: '✅ 사용 완료',
+};
+
+// 상점: 다이아로 보상을 구매 → 내 보상에 쌓임 → "사용"을 누르면 매니저가 실제로 해주고 사용 완료 처리
 export function SpendScreen({ navigation }: Props) {
-    const { diamonds, catalog, fetchCatalog, fetchMe, requestSpend } = useAppStore();
+    const { diamonds, catalog, rewards, fetchCatalog, fetchRewards, fetchMe, buyReward, requestUseReward } = useAppStore();
+    const [tab, setTab] = useState<Tab>('shop');
     const [refreshing, setRefreshing] = useState(false);
     const [loadingId, setLoadingId] = useState<string | null>(null);
 
-    useEffect(() => { fetchCatalog().catch(() => {}); }, []);
+    const load = useCallback(() => Promise.all([
+        fetchMe().catch(() => {}),
+        fetchCatalog().catch(() => {}),
+        fetchRewards().catch(() => {}),
+    ]), []);
 
-    useFocusEffect(useCallback(() => {
-        fetchMe().catch(() => {});
-        fetchCatalog().catch(() => {});
-    }, []));
+    useFocusEffect(useCallback(() => { load(); }, [load]));
 
     const refresh = useCallback(async () => {
         setRefreshing(true);
-        await Promise.all([
-            fetchMe().catch(() => {}),
-            fetchCatalog().catch(() => {}),
-        ]);
+        await load();
         setRefreshing(false);
-    }, []);
+    }, [load]);
 
-    const handleRequest = (item: CatalogItem) => {
+    const handleBuy = (item: CatalogItem) => {
         if (diamonds < item.cost) {
             Alert.alert('다이아가 부족해요', '하루 할일을 모두 완료해서 다이아를 모아봐요!');
             return;
         }
         Alert.alert(
-            `"${item.title}" 요청`,
-            '매니저에게 구매 요청을 보낼까요?',
+            `"${item.title}" 구매`,
+            `다이아 ${item.cost}개로 구매할까요?`,
             [
                 { text: '취소', style: 'cancel' },
                 {
-                    text: '요청하기',
+                    text: '구매',
                     onPress: async () => {
                         setLoadingId(item.id);
                         try {
-                            await requestSpend(item.id);
-                            Alert.alert('요청 완료!', '매니저가 확인 후 승인해줄 거예요 🎉');
+                            await buyReward(item.id);
+                            Alert.alert('구매 완료! 🎉', '"내 보상"에서 쓰고 싶을 때 사용을 눌러요');
                         } catch (e: unknown) {
                             const msg = e instanceof Error ? e.message : '오류';
-                            Alert.alert('오류', msg === 'insufficient_gems' ? '다이아가 부족해요' : msg);
+                            Alert.alert('오류',
+                                msg === 'insufficient_gems' ? '다이아가 부족해요'
+                                : msg === 'catalog_item_not_found' ? '이미 팔렸거나 없어진 보상이에요'
+                                : msg);
+                            load();
                         } finally {
                             setLoadingId(null);
                         }
@@ -85,6 +91,36 @@ export function SpendScreen({ navigation }: Props) {
         );
     };
 
+    const handleUse = (reward: OwnedReward) => {
+        Alert.alert(
+            `"${reward.title}" 사용`,
+            '매니저에게 사용하겠다고 알릴까요?',
+            [
+                { text: '취소', style: 'cancel' },
+                {
+                    text: '사용',
+                    onPress: async () => {
+                        setLoadingId(reward.id);
+                        try {
+                            await requestUseReward(reward.id);
+                        } catch (e: unknown) {
+                            Alert.alert('오류', e instanceof Error ? e.message : '오류');
+                            load();
+                        } finally {
+                            setLoadingId(null);
+                        }
+                    },
+                },
+            ],
+        );
+    };
+
+    // 아직 쓰지 않은 보상이 위로
+    const myRewards = [...rewards].sort((a, b) =>
+        Number(a.status === 'used') - Number(b.status === 'used') || b.purchased_at - a.purchased_at
+    );
+    const unusedCount = rewards.filter(r => r.status !== 'used').length;
+
     return (
         <SafeAreaView style={styles.safe} edges={['top']}>
             <View style={styles.header}>
@@ -92,51 +128,99 @@ export function SpendScreen({ navigation }: Props) {
                     <Text style={styles.backText}>‹</Text>
                 </TouchableOpacity>
                 <Text style={styles.title}>보상 상점</Text>
-                <View style={{ width: 36 }} />
+                <View style={styles.balanceChip}>
+                    <Gem size={16} />
+                    <Text style={styles.balanceNum}>{diamonds}</Text>
+                </View>
             </View>
 
-            <GemBalanceBar diamonds={diamonds} />
+            <View style={styles.tabs}>
+                <TouchableOpacity style={[styles.tab, tab === 'shop' && styles.tabActive]} onPress={() => setTab('shop')}>
+                    <Text style={[styles.tabText, tab === 'shop' && styles.tabTextActive]}>상점</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.tab, tab === 'mine' && styles.tabActive]} onPress={() => setTab('mine')}>
+                    <Text style={[styles.tabText, tab === 'mine' && styles.tabTextActive]}>
+                        내 보상{unusedCount > 0 ? ` (${unusedCount})` : ''}
+                    </Text>
+                </TouchableOpacity>
+            </View>
 
-            <FlatList
-                data={catalog}
-                keyExtractor={i => i.id}
-                contentContainerStyle={styles.list}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-                ListEmptyComponent={
-                    <View style={styles.empty}>
-                        <Text style={styles.emptyText}>
-                            아직 등록된 보상이 없어요{'\n'}매니저에게 보상 아이템을 추가해달라고 해봐요
-                        </Text>
-                    </View>
-                }
-                renderItem={({ item }) => {
-                    const affordable = diamonds >= item.cost;
-                    return (
-                        <View style={[styles.card, !affordable && styles.cardDisabled]}>
+            {tab === 'shop' ? (
+                <FlatList
+                    data={catalog}
+                    keyExtractor={i => i.id}
+                    contentContainerStyle={styles.list}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
+                    ListEmptyComponent={
+                        <View style={styles.empty}>
+                            <Text style={styles.emptyText}>
+                                아직 살 수 있는 보상이 없어요{'\n'}매니저에게 보상을 추가해달라고 해봐요
+                            </Text>
+                        </View>
+                    }
+                    renderItem={({ item }) => {
+                        const affordable = diamonds >= item.cost;
+                        return (
+                            <View style={[styles.card, !affordable && styles.cardDisabled]}>
+                                <View style={styles.cardBody}>
+                                    <Text style={styles.itemTitle}>{item.title}</Text>
+                                    {item.description ? (
+                                        <Text style={styles.itemDesc}>{item.description}</Text>
+                                    ) : null}
+                                    <CostChips item={item} />
+                                </View>
+                                {loadingId === item.id ? (
+                                    <ActivityIndicator color={colors.ocean[500]} />
+                                ) : (
+                                    <TouchableOpacity
+                                        style={[styles.requestBtn, !affordable && styles.requestBtnDisabled]}
+                                        onPress={() => handleBuy(item)}
+                                        disabled={!affordable}
+                                    >
+                                        <Text style={[styles.requestBtnText, !affordable && { color: colors.ink[300] }]}>
+                                            {affordable ? '구매' : '부족'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        );
+                    }}
+                />
+            ) : (
+                <FlatList
+                    data={myRewards}
+                    keyExtractor={r => r.id}
+                    contentContainerStyle={styles.list}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
+                    ListEmptyComponent={
+                        <View style={styles.empty}>
+                            <Text style={styles.emptyText}>
+                                아직 가진 보상이 없어요{'\n'}상점에서 다이아로 구매해봐요
+                            </Text>
+                        </View>
+                    }
+                    renderItem={({ item }) => (
+                        <View style={[styles.card, item.status === 'used' && styles.cardDisabled]}>
                             <View style={styles.cardBody}>
                                 <Text style={styles.itemTitle}>{item.title}</Text>
                                 {item.description ? (
                                     <Text style={styles.itemDesc}>{item.description}</Text>
                                 ) : null}
-                                <CostChips item={item} />
+                                <Text style={styles.rewardStatus}>{REWARD_STATUS[item.status]}</Text>
                             </View>
-                            {loadingId === item.id ? (
-                                <ActivityIndicator color={colors.ocean[500]} />
-                            ) : (
-                                <TouchableOpacity
-                                    style={[styles.requestBtn, !affordable && styles.requestBtnDisabled]}
-                                    onPress={() => handleRequest(item)}
-                                    disabled={!affordable}
-                                >
-                                    <Text style={[styles.requestBtnText, !affordable && { color: colors.ink[300] }]}>
-                                        {affordable ? '요청' : '부족'}
-                                    </Text>
-                                </TouchableOpacity>
+                            {item.status === 'owned' && (
+                                loadingId === item.id ? (
+                                    <ActivityIndicator color={colors.ocean[500]} />
+                                ) : (
+                                    <TouchableOpacity style={styles.requestBtn} onPress={() => handleUse(item)}>
+                                        <Text style={styles.requestBtnText}>사용</Text>
+                                    </TouchableOpacity>
+                                )
                             )}
                         </View>
-                    );
-                }}
-            />
+                    )}
+                />
+            )}
         </SafeAreaView>
     );
 }
@@ -161,14 +245,25 @@ const styles = StyleSheet.create({
         color: colors.ink[900],
         textAlign: 'center',
     },
-    balanceBar: {
+    tabs: {
         flexDirection: 'row',
-        gap: 8,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: colors.paper2,
-        flexWrap: 'wrap',
+        borderBottomWidth: 1,
+        borderBottomColor: colors.ink[100],
     },
+    tab: {
+        flex: 1,
+        paddingVertical: 12,
+        alignItems: 'center',
+        borderBottomWidth: 2,
+        borderBottomColor: 'transparent',
+    },
+    tabActive: { borderBottomColor: colors.ocean[500] },
+    tabText: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.base,
+        color: colors.ink[300],
+    },
+    tabTextActive: { color: colors.ocean[700] },
     balanceChip: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -231,10 +326,11 @@ const styles = StyleSheet.create({
         color: colors.ink[700],
         fontWeight: '700',
     },
-    freeBadge: {
+    onceChip: { backgroundColor: colors.sun[300] },
+    rewardStatus: {
         fontFamily: fontFamilies.bodyMed,
-        fontSize: fontSizes.xs,
-        color: colors.ocean[500],
+        fontSize: fontSizes.sm,
+        color: colors.ink[500],
         marginTop: 2,
     },
     requestBtn: {

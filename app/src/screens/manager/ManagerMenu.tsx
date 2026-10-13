@@ -6,22 +6,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
-import type { SpendRequest } from '../../store/appStore';
+import type { OwnedReward } from '../../store/appStore';
 import { useAuthStore } from '../../store/authStore';
 import { api } from '../../api/client';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'ManagerMenu'> };
 
-// 매니저 관리 메뉴 — 자주 쓰지 않는 기능(초대 코드, 보상 카탈로그, 보상 요청, 로그아웃)을 대시보드에서 한 단계 안으로
+// 매니저 관리 메뉴 — 자주 쓰지 않는 기능(초대 코드, 보상 카탈로그, 보상 사용 요청, 로그아웃)을 대시보드에서 한 단계 안으로
 export function ManagerMenuScreen({ navigation }: Props) {
     const logout = useAuthStore(s => s.logout);
     const [codeLoading, setCodeLoading] = useState(false);
-    const [pendingSpend, setPendingSpend] = useState(0);
+    const [pendingUse, setPendingUse] = useState(0);
 
     useFocusEffect(useCallback(() => {
-        api<SpendRequest[]>('/spend-requests?status=pending')
-            .then(list => setPendingSpend(list.length))
+        api<OwnedReward[]>('/rewards?status=use_requested')
+            .then(list => setPendingUse(list.length))
             .catch(() => {});
     }, []));
 
@@ -65,15 +65,15 @@ export function ManagerMenuScreen({ navigation }: Props) {
                 <MenuItem
                     icon="🎁"
                     label="보상 카탈로그"
-                    desc="다이아로 바꿀 수 있는 보상 등록 · 수정"
+                    desc="상점에 올릴 보상 등록 · 수정"
                     onPress={() => navigation.navigate('Catalog')}
                 />
                 <MenuItem
                     icon="💎"
-                    label="보상 요청"
-                    desc="학생이 요청한 보상 승인 · 거절"
-                    badge={pendingSpend}
-                    onPress={() => navigation.navigate('SpendApproval')}
+                    label="보상 사용 요청"
+                    desc="학생이 쓰겠다고 한 보상을 해주고 사용 완료 처리"
+                    badge={pendingUse}
+                    onPress={() => navigation.navigate('RewardUse')}
                 />
                 <MenuItem
                     icon="🔗"
