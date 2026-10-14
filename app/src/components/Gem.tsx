@@ -4,14 +4,15 @@ import { colors } from '../theme';
 
 interface GemProps {
   size?: number;
+  kind?: 'diamond' | 'ruby';
 }
 
-export function Gem({ size = 24 }: GemProps) {
+export function Gem({ size = 24, kind = 'diamond' }: GemProps) {
   // useId()는 ":r0:" 형식으로 콜론 포함 → url(#...) 참조 깨짐, sanitize 필수
   const rawId = React.useId();
   const gradId = React.useMemo(() => `gem${rawId.replace(/:/g, '')}`, [rawId]);
 
-  const [lt, md, dk] = colors.diamond;
+  const [lt, md, dk] = kind === 'ruby' ? colors.ruby : colors.diamond;
 
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32">

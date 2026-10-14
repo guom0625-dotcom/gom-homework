@@ -10,6 +10,7 @@ import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { api } from '../../api/client';
 import type { OwnedReward } from '../../store/appStore';
 import { WEEK_MS } from '../../lib/days';
+import { Price } from '../../components/Price';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'RewardUse'> };
@@ -156,7 +157,7 @@ export function RewardUseScreen({ navigation }: Props) {
                     <View style={styles.card}>
                         <View style={styles.cardTop}>
                             <Text style={styles.studentName}>{item.student_name ?? '학생'}</Text>
-                            <Text style={styles.dateText}>💎 {item.cost}</Text>
+                            <Price diamonds={item.cost} rubies={item.cost_ruby} size={12} />
                         </View>
                         <Text style={styles.itemTitle}>{item.title}</Text>
                         {item.description ? <Text style={styles.itemDesc}>{item.description}</Text> : null}

@@ -61,7 +61,7 @@ export function MainScreen() {
   const { user } = useAuthStore();
   const {
     today, joinedDay, dayStatus, diamonds, streak, monthProgress, character, avatar, fetchMe,
-    registerDeadlineMin, registerDeadlineEnabled, completeDeadlineMin,
+    registerDeadlineMin, registerDeadlineEnabled, completeDeadlineMin, rubies,
   } = useAppStore();
   // dayStatus 가 todo 가 아니면 오늘 등록한 할일이 있다는 뜻 → 등록 마감이 지나도 추가 가능
   const registerOpen = canRegisterOn(
@@ -171,6 +171,7 @@ export function MainScreen() {
             character={character}
             photoUrl={avatar ?? undefined}
             diamonds={diamonds}
+            rubies={rubies}
             streak={streak}
           />
         </View>
@@ -249,21 +250,18 @@ export function MainScreen() {
         <View style={[styles.bottomSheet, { paddingBottom: 16 + insets.bottom }]}>
           <StatusBanner status={dayStatus} />
 
+          <Button
+            variant={dayStatus === 'approved' ? 'ocean' : 'coral'}
+            size="md"
+            label={dayStatus === 'todo' && !registerOpen ? '오늘 등록 마감' : ACTION_LABEL[dayStatus]}
+            style={styles.fullBtn}
+            onPress={handleMainAction}
+          />
+
           <View style={styles.actionRow}>
             <SideButton icon="📋" label="목록" onPress={() => navigation.navigate('TaskList', { day: today })} />
-
-            <View style={{ flex: 1 }}>
-              <Button
-                variant={dayStatus === 'approved' ? 'ocean' : 'coral'}
-                size="md"
-                label={dayStatus === 'todo' && !registerOpen ? '오늘 등록 마감' : ACTION_LABEL[dayStatus]}
-                style={styles.fullBtn}
-                onPress={handleMainAction}
-              />
-            </View>
-
+            <SideButton icon="📚" label="책읽기" onPress={() => navigation.navigate('Books')} />
             <SideButton icon="💎" label="상점" onPress={() => navigation.navigate('Spend')} />
-
             <SideButton icon="⚙️" label="설정" onPress={() => navigation.navigate('Profile')} />
           </View>
         </View>
@@ -334,10 +332,10 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 10,
+    marginTop: 8,
     alignItems: 'center',
   },
-  sideBtn: { width: 54 },
+  sideBtn: { flex: 1 },
   sideBtnInner: { alignItems: 'center' },
   sideBtnIcon: { fontSize: 18, lineHeight: 22 },
   sideBtnLabel: {
@@ -347,5 +345,5 @@ const styles = StyleSheet.create({
     color: colors.ink[700],
   },
   squareBtn: { alignSelf: 'stretch' },
-  fullBtn: { alignSelf: 'stretch' },
+  fullBtn: { alignSelf: 'stretch', marginTop: 10 },
 });

@@ -10,7 +10,8 @@ interface CatalogRow {
     manager_id: string;
     title: string;
     description: string | null;
-    cost: number;
+    cost: number;       // 다이아
+    cost_ruby: number;  // 루비
     kind: 'once' | 'always';
 }
 
@@ -42,22 +43,28 @@ export function registerRewardRoutes(app: FastifyInstance, db: Db, auth: AuthHan
             if (!item) return { ok: false, error: 'catalog_item_not_found', code: 404 };
 
             const balance = db.prepare(
-                'SELECT diamond FROM gems_balance WHERE student_id = ?'
-            ).get(req.user.id) as { diamond: number } | undefined;
-            if (!balance || balance.diamond < item.cost) return { ok: false, error: 'insufficient_gems', code: 409 };
+                'SELECT diamond, ruby FROM gems_balance WHERE student_id = ?'
+            ).get(req.user.id) as { diamond: number; ruby: number } | undefined;
+            if (!balance || balance.diamond < item.cost || balance.ruby < item.cost_ruby) {
+                return { ok: false, error: 'insufficient_gems', code: 409 };
+            }
 
             const ownedId = ulid();
             const now = Date.now();
-            db.prepare('UPDATE gems_balance SET diamond = diamond - ?, updated_at = ? WHERE student_id = ?')
-                .run(item.cost, now, req.user.id);
-            db.prepare(`
+            db.prepare(
+                'UPDATE gems_balance SET diamond = diamond - ?, ruby = ruby - ?, updated_at = ? WHERE student_id = ?'
+            ).run(item.cost, item.cost_ruby, now, req.user.id);
+            const logSpend = db.prepare(`
                 INSERT INTO gem_transactions (id, student_id, gem_type, delta, reason, ref_id, created_at)
                 VALUES (?, ?, ?, ?, 'purchase', ?, ?)
-            `).run(ulid(), req.user.id, GEM_TYPE, -item.cost, ownedId, now);
+            `);
+            if (item.cost > 0) logSpend.run(ulid(), req.user.id, GEM_TYPE, -item.cost, ownedId, now);
+            if (item.cost_ruby > 0) logSpend.run(ulid(), req.user.id, 'ruby', -item.cost_ruby, ownedId, now);
             db.prepare(`
-                INSERT INTO owned_rewards (id, student_id, catalog_id, title, description, cost, status, purchased_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'owned', ?)
-            `).run(ownedId, req.user.id, item.id, item.title, item.description, item.cost, now);
+                INSERT INTO owned_rewards
+                    (id, student_id, catalog_id, title, description, cost, cost_ruby, status, purchased_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'owned', ?)
+            `).run(ownedId, req.user.id, item.id, item.title, item.description, item.cost, item.cost_ruby, now);
             // 1회성 보상은 팔리면 상점에서 내린다
             if (item.kind === 'once') {
                 db.prepare('UPDATE reward_catalog SET active = 0 WHERE id = ?').run(item.id);

@@ -11,6 +11,7 @@ interface TopHudProps {
   character?: CharacterType;
   mood?: CharacterMood;
   diamonds?: number;
+  rubies?: number;
   streak?: number;
   photoUrl?: string;
 }
@@ -20,6 +21,7 @@ export function TopHud({
   character = 'bear',
   mood = 'happy',
   diamonds = 0,
+  rubies = 0,
   streak = 0,
   photoUrl,
 }: TopHudProps) {
@@ -39,9 +41,19 @@ export function TopHud({
         end={{ x: 0, y: 1 }}
         style={styles.pointChip}
       >
-        <Gem size={20} />
+        <Gem size={18} />
         <Text style={styles.pointNum}>{diamonds.toLocaleString()}</Text>
-        <Text style={styles.pointUnit}>개</Text>
+      </LinearGradient>
+
+      {/* 루비 칩 */}
+      <LinearGradient
+        colors={gradients.rubyChip}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.pointChip}
+      >
+        <Gem size={18} kind="ruby" />
+        <Text style={[styles.pointNum, styles.rubyNum]}>{rubies.toLocaleString()}</Text>
       </LinearGradient>
     </View>
   );
@@ -51,8 +63,8 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
+    gap: 8,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: 999,
@@ -80,9 +92,10 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 6,
     paddingLeft: 8,
-    paddingRight: 12,
+    paddingRight: 10,
     borderRadius: 999,
   },
+  rubyNum: { color: '#c4304f' },
   pointNum: {
     fontFamily: fontFamilies.num,
     fontSize: fontSizes.md,

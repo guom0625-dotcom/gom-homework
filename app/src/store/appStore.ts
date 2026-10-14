@@ -29,7 +29,8 @@ export interface CatalogItem {
     manager_id: string;
     title: string;
     description: string | null;
-    cost: number;
+    cost: number;       // 다이아 가격
+    cost_ruby: number;  // 루비 가격 (둘 중 하나는 1 이상)
     kind: 'once' | 'always';  // once = 1회성(팔리면 상점에서 사라짐), always = 상시
     active: number;
     created_at: number;
@@ -43,10 +44,25 @@ export interface OwnedReward {
     title: string;
     description: string | null;
     cost: number;
+    cost_ruby: number;
     status: 'owned' | 'use_requested' | 'used';
     purchased_at: number;
     use_requested_at: number | null;
     used_at: number | null;
+    student_name?: string;
+}
+
+// 책읽기. reading → (학생이 읽은 내용을 적어 완료 요청) done_requested → (매니저 승인, 루비 지급) done
+export interface Book {
+    id: string;
+    student_id: string;
+    title: string;
+    photo: string;           // 책 사진 (data URL)
+    status: 'reading' | 'done_requested' | 'done';
+    summary: string | null;  // 완료 요청 때 적은 읽은 내용
+    created_at: number;
+    requested_at: number | null;
+    done_at: number | null;
     student_name?: string;
 }
 
@@ -57,6 +73,8 @@ export interface StudentSummary {
     avatar: string | null;
     joined_day: number;      // 가입한 날짜
     diamonds: number;
+    rubies: number;
+    pending_books: number;   // 완료 승인을 기다리는 책 수
     today_total: number;     // 오늘 등록한 할일 수
     pending_review: number;  // 매니저 검토를 기다리는 할일 수
 }
@@ -66,6 +84,7 @@ interface MeData {
     name: string;
     role: 'manager' | 'student';
     today: number;
+    rubies?: number;
     register_deadline_min?: number;
     complete_deadline_min?: number;
     register_deadline_enabled?: boolean;
@@ -116,6 +135,7 @@ interface AppState {
     completeDeadlineMin: number;  // 완료 상신 마감 = 다이아 지급 시각
     streak: number;
     diamonds: number;
+    rubies: number;
     dayStatus: DayStatus;       // 오늘의 상태
     character: CharacterType;
     avatar: string | null;
@@ -131,6 +151,15 @@ interface AppState {
     fetchRewards: (usedSince?: number) => Promise<void>;
     buyReward: (catalogId: string) => Promise<void>;
     requestUseReward: (id: string) => Promise<void>;
+
+    // student — 책읽기
+    books: Book[];                   // 안 끝난 책 전부 + booksSince 이후 완료된 책
+    booksSince: number;
+    booksOlderDoneAt: number | null; // 더 예전에 완료한 책이 있으면 그 시각
+    fetchBooks: (doneSince?: number) => Promise<void>;
+    addBook: (title: string, photo: string) => Promise<void>;
+    finishBook: (id: string, summary: string) => Promise<void>;
+    deleteBook: (id: string) => Promise<void>;
 
     // manager
     students: StudentSummary[];
@@ -169,6 +198,7 @@ const initialState = {
     completeDeadlineMin: 1800,
     streak: 0,
     diamonds: 0,
+    rubies: 0,
     dayStatus: 'todo' as DayStatus,
     character: 'bear' as CharacterType,
     avatar: null as string | null,
@@ -176,6 +206,9 @@ const initialState = {
     rewards: [] as OwnedReward[],
     rewardsSince: 0,
     rewardsOlderUsedAt: null as number | null,
+    books: [] as Book[],
+    booksSince: 0,
+    booksOlderDoneAt: null as number | null,
     students: [],
     selectedStudentTasks: [],
     selectedOlderDay: null as number | null,
@@ -205,7 +238,7 @@ export const useAppStore = create<AppState>((set, get) => {
             registerDeadlineMin: me.register_deadline_min ?? 1440,
             registerDeadlineEnabled: me.register_deadline_enabled ?? false,
             completeDeadlineMin: me.complete_deadline_min ?? 1800,
-            diamonds: me.diamonds ?? 0, streak: me.streak ?? 0, character, avatar,
+            diamonds: me.diamonds ?? 0, rubies: me.rubies ?? 0, streak: me.streak ?? 0, character, avatar,
         });
 
         if (me.role === 'student') {
@@ -288,6 +321,28 @@ export const useAppStore = create<AppState>((set, get) => {
         set(st => ({
             rewards: st.rewards.map(r => r.id === id ? { ...r, status: 'use_requested' as const } : r),
         }));
+    },
+
+    // 완료한 책은 최근 1주치만 받고, 더 보기로 범위를 넓힌다 (doneSince 생략 시 현재 범위 유지)
+    fetchBooks: async (doneSince) => {
+        const since = doneSince ?? (get().booksSince || Date.now() - WEEK_MS);
+        const res = await api<{ books: Book[]; older_done_at: number | null }>(`/books?done_since=${since}`);
+        set({ books: res.books, booksSince: since, booksOlderDoneAt: res.older_done_at });
+    },
+
+    addBook: async (title, photo) => {
+        const book = await api<Book>('/books', { method: 'POST', body: JSON.stringify({ title, photo }) });
+        set(st => ({ books: [book, ...st.books] }));
+    },
+
+    finishBook: async (id, summary) => {
+        const book = await api<Book>(`/books/${id}/finish`, { method: 'POST', body: JSON.stringify({ summary }) });
+        set(st => ({ books: st.books.map(b => b.id === id ? book : b) }));
+    },
+
+    deleteBook: async (id) => {
+        await api(`/books/${id}`, { method: 'DELETE' });
+        set(st => ({ books: st.books.filter(b => b.id !== id) }));
     },
 
     fetchStudents: async () => {

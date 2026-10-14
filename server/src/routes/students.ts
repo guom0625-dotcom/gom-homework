@@ -14,6 +14,8 @@ export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHa
         const students = db.prepare(`
             SELECT u.id, u.name, u.character, u.avatar, u.created_at,
                    COALESCE(gb.diamond, 0) AS diamonds,
+                   COALESCE(gb.ruby, 0) AS rubies,
+                   (SELECT COUNT(*) FROM books b WHERE b.student_id = u.id AND b.status = 'done_requested') AS pending_books,
                    (SELECT COUNT(*) FROM tasks t WHERE t.student_id = u.id AND t.day = ?) AS today_total,
                    (SELECT COUNT(*) FROM tasks t WHERE t.student_id = u.id
                       AND t.status IN ('plan_submitted', 'submitted', 'delete_requested')) AS pending_review,
@@ -70,7 +72,7 @@ export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHa
             const others = db.prepare('SELECT 1 FROM manager_student_link WHERE student_id = ?').get(id);
             if (others) return false;
 
-            for (const table of ['tasks', 'owned_rewards', 'gem_transactions', 'gems_balance', 'auto_reward_rules', 'pairing_codes']) {
+            for (const table of ['tasks', 'books', 'owned_rewards', 'gem_transactions', 'gems_balance', 'auto_reward_rules', 'pairing_codes']) {
                 db.prepare(`DELETE FROM ${table} WHERE student_id = ?`).run(id);
             }
             db.prepare('DELETE FROM auth_keys WHERE user_id = ?').run(id);

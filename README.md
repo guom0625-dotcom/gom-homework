@@ -2,6 +2,7 @@
 
 매일 할일을 완료하며 그 달의 섬(하루 = 섬 하나)을 정복하는 가족용 숙제 관리 앱.
 
+- **책읽기** — 학생이 책을 등록(제목+사진) → 다 읽으면 읽은 내용을 적어 완료 요청 → 매니저 승인 시 루비 1개
 - **학생** — 할일 등록 → 제출 → 하루 할일이 전부 승인되면 다음 날 다이아 1개 → 상점에서 보상 구매 → 사용
 - **매니저** — 할일 승인/반려, 삭제 요청 승인 → 보상 등록, 학생이 쓰겠다는 보상을 해주고 사용 완료 처리
 
@@ -218,6 +219,10 @@ Base URL: `http://<서버-IP>:3100`
 | `POST` | `/tasks/:id/submit` | 완료 상신 |
 | `POST` | `/tasks/:id/request-delete` | 할일 삭제 요청 (매니저 승인 필요) |
 | `POST` | `/tasks/:id/cancel-delete` | 삭제 요청 취소 |
+| `GET` | `/books?done_since=<ms>` | 내 책 목록 (안 끝난 책 전부 + 그 시각 이후 완료분) |
+| `POST` | `/books` | 책 등록 (`title`, `photo` 필수) |
+| `POST` | `/books/:id/finish` | 읽은 내용(`summary`)을 적어 완료 요청 |
+| `DELETE` | `/books/:id` | 읽는 중인 책 삭제 |
 | `GET` | `/catalog` | 보상 카탈로그 조회 |
 | `POST` | `/catalog/:id/buy` | 보상 구매 (다이아 즉시 차감, 보유 보상으로 추가) |
 | `GET` | `/rewards` | 내 보유 보상 목록 |
@@ -237,8 +242,10 @@ Base URL: `http://<서버-IP>:3100`
 | `POST` | `/tasks/:id/approve-plan` · `reject-plan` | 계획 승인 / 반려 |
 | `POST` | `/tasks/:id/approve-delete` · `reject-delete` | 삭제 요청 승인(실제 삭제) / 반려 |
 | `GET/PUT` | `/rules` | 자동 보상 규칙 조회/설정 |
+| `GET` | `/books?status=done_requested` | 연결된 학생들의 책 (상태별 / `done_since`) |
+| `POST` | `/books/:id/approve` · `reject` | 책읽기 완료 승인(루비 1개 지급) / 반려 |
 | `GET/PUT` | `/settings` | 마감시간 조회/설정 (`register_deadline_min`, `complete_deadline_min`) |
-| `POST` | `/catalog` | 보상 아이템 등록 (`kind`: `once` 1회성 / `always` 상시) |
+| `POST` | `/catalog` | 보상 아이템 등록 (`cost` 다이아, `cost_ruby` 루비, `kind`: `once` 1회성 / `always` 상시) |
 | `PATCH` | `/catalog/:id` | 보상 아이템 수정 |
 | `DELETE` | `/catalog/:id` | 보상 아이템 삭제 |
 | `GET` | `/rewards?status=use_requested` | 연결된 학생들의 보유 보상 (상태별 필터) |
@@ -250,6 +257,14 @@ Base URL: `http://<서버-IP>:3100`
 - 할일·보상 기록은 서버에서 지우지 않는다 (삭제 승인된 할일만 실제 삭제).
 - 화면에는 최근 1주일치만 보여주고, 목록 아래 "이전 1주일 더 보기"로 1주일씩 더 불러온다.
   매니저 검토를 기다리는 할일과 아직 쓰지 않은 보상은 기간과 무관하게 항상 보인다.
+
+### 책읽기와 루비
+
+- 책은 날짜와 무관하게 언제든 등록한다. 제목과 책 사진이 둘 다 있어야 등록되고, 매니저 승인은 필요 없다.
+- 다 읽으면 학생이 읽은 내용을 적어 완료 요청 → 매니저가 승인하면 **루비 1개** 지급, 반려하면 다시 읽는 중.
+- 보석은 두 종류: **다이아**(하루 할일 전부 승인) · **루비**(책 한 권 완료).
+- 보상 가격은 다이아(`cost`)와 루비(`cost_ruby`)를 섞거나 하나만 쓸 수 있다 (합쳐서 1 이상).
+  예: 다이아 3 + 루비 2 / 다이아 1 / 루비 4.
 
 ### 보상 (다이아)
 

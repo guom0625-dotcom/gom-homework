@@ -16,7 +16,7 @@ import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'ManagerMenu'> };
 
-// 매니저 관리 메뉴 — 자주 쓰지 않는 기능(초대 코드, 보상 카탈로그, 보상 사용 요청, 로그아웃)을 대시보드에서 한 단계 안으로
+// 매니저 관리 메뉴 — 학생 할일 승인 외의 기능(보상, 책읽기, 마감시간, 초대 코드, 로그아웃 등)을 대시보드에서 한 단계 안으로
 export function ManagerMenuScreen({ navigation }: Props) {
     const logout = useAuthStore(s => s.logout);
     const [codeLoading, setCodeLoading] = useState(false);
@@ -138,6 +138,13 @@ export function ManagerMenuScreen({ navigation }: Props) {
                     desc="학생이 쓰겠다고 한 보상을 해주고 사용 완료 처리"
                     badge={pendingUse}
                     onPress={() => navigation.navigate('RewardUse')}
+                />
+                <MenuItem
+                    icon="📚"
+                    label="책읽기"
+                    desc="학생이 다 읽었다고 한 책을 확인하고 승인 (루비 1개 지급)"
+                    badge={students.reduce((sum, st) => sum + st.pending_books, 0)}
+                    onPress={() => navigation.navigate('BookReview')}
                 />
                 <MenuItem
                     icon="⏰"

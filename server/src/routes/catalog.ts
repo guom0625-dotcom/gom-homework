@@ -7,7 +7,9 @@ import type { AuthHandler } from '../index.ts';
 const ItemBody = z.object({
     title: z.string().min(1).max(100),
     description: z.string().max(500).nullable().optional(),
-    cost: z.number().int().min(1),
+    // 가격: 다이아(cost)와 루비(cost_ruby)를 섞을 수 있다. 둘 중 하나는 1 이상
+    cost: z.number().int().min(0),
+    cost_ruby: z.number().int().min(0).optional(),
     // once = 1회성(한 번 팔리면 상점에서 사라짐), always = 상시
     kind: z.enum(['once', 'always']).optional(),
 });
@@ -36,15 +38,18 @@ export function registerCatalogRoutes(app: FastifyInstance, db: Db, auth: AuthHa
         const body = ItemBody.safeParse(req.body);
         if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
 
+        const costRuby = body.data.cost_ruby ?? 0;
+        if (body.data.cost + costRuby < 1) return reply.code(400).send({ error: 'invalid_body' });
+
         const id = ulid();
         const now = Date.now();
         db.prepare(`
             INSERT INTO reward_catalog
-                (id, manager_id, title, description, cost, kind, active, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+                (id, manager_id, title, description, cost, cost_ruby, kind, active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
         `).run(
             id, req.user.id, body.data.title, body.data.description ?? null,
-            body.data.cost, body.data.kind ?? 'always', now
+            body.data.cost, costRuby, body.data.kind ?? 'always', now
         );
 
         return reply.code(201).send(db.prepare('SELECT * FROM reward_catalog WHERE id = ?').get(id));
@@ -58,9 +63,12 @@ export function registerCatalogRoutes(app: FastifyInstance, db: Db, auth: AuthHa
         if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
 
         const item = db.prepare(
-            'SELECT id FROM reward_catalog WHERE id = ? AND manager_id = ?'
-        ).get(id, req.user.id);
+            'SELECT id, cost, cost_ruby FROM reward_catalog WHERE id = ? AND manager_id = ?'
+        ).get(id, req.user.id) as { id: string; cost: number; cost_ruby: number } | undefined;
         if (!item) return reply.code(404).send({ error: 'not_found' });
+        if ((body.data.cost ?? item.cost) + (body.data.cost_ruby ?? item.cost_ruby) < 1) {
+            return reply.code(400).send({ error: 'invalid_body' });
+        }
 
         const fields = Object.entries(body.data)
             .map(([k]) => `${k} = ?`)

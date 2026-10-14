@@ -9,6 +9,7 @@ import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { api } from '../../api/client';
 import type { CatalogItem } from '../../store/appStore';
 import { Gem } from '../../components/Gem';
+import { Price } from '../../components/Price';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'Catalog'> };
@@ -16,7 +17,8 @@ type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'Catalo
 type FormData = {
     title: string;
     description: string;
-    cost: string;
+    cost: string;      // 다이아
+    costRuby: string;  // 루비
     kind: CatalogItem['kind'];
 };
 
@@ -27,7 +29,7 @@ const KIND_DESC: Record<CatalogItem['kind'], string> = {
 };
 
 const EMPTY_FORM: FormData = {
-    title: '', description: '', cost: '1', kind: 'always',
+    title: '', description: '', cost: '1', costRuby: '0', kind: 'always',
 };
 
 function formFromItem(item: CatalogItem): FormData {
@@ -35,6 +37,7 @@ function formFromItem(item: CatalogItem): FormData {
         title: item.title,
         description: item.description ?? '',
         cost: String(item.cost),
+        costRuby: String(item.cost_ruby),
         kind: item.kind,
     };
 }
@@ -42,10 +45,7 @@ function formFromItem(item: CatalogItem): FormData {
 function CostRow({ item }: { item: CatalogItem }) {
     return (
         <View style={styles.costRow}>
-            <View style={styles.costChip}>
-                <Gem size={13} />
-                <Text style={styles.costNum}>{item.cost}</Text>
-            </View>
+            <Price diamonds={item.cost} rubies={item.cost_ruby} size={13} />
             <View style={[styles.costChip, item.kind === 'once' && styles.kindChipOnce]}>
                 <Text style={styles.costNum}>{KIND_LABEL[item.kind]}</Text>
             </View>
@@ -96,15 +96,17 @@ export function CatalogScreen({ navigation }: Props) {
             Alert.alert('오류', '이름을 입력해주세요');
             return;
         }
-        const cost = Number(form.cost);
-        if (!Number.isInteger(cost) || cost < 1) {
-            Alert.alert('오류', '비용은 다이아 1개 이상이어야 해요');
+        const cost = Number(form.cost) || 0;
+        const costRuby = Number(form.costRuby) || 0;
+        if (!Number.isInteger(cost) || !Number.isInteger(costRuby) || cost < 0 || costRuby < 0 || cost + costRuby < 1) {
+            Alert.alert('오류', '가격은 다이아와 루비를 합쳐 1개 이상이어야 해요');
             return;
         }
         const body = {
             title: form.title.trim(),
             description: form.description.trim() || null,
             cost,
+            cost_ruby: costRuby,
             kind: form.kind,
         };
         setSaving(true);
@@ -248,7 +250,7 @@ export function CatalogScreen({ navigation }: Props) {
                             numberOfLines={3}
                         />
 
-                        <Text style={styles.fieldLabel}>비용 (다이아)</Text>
+                        <Text style={styles.fieldLabel}>가격 (다이아 · 루비를 섞거나 하나만 써도 돼요)</Text>
                         <View style={styles.gemRow}>
                             <Gem size={18} />
                             <Text style={styles.gemLabel}>다이아</Text>
@@ -258,6 +260,18 @@ export function CatalogScreen({ navigation }: Props) {
                                 onChangeText={v => setForm(f => ({ ...f, cost: v }))}
                                 keyboardType="number-pad"
                                 placeholder="1"
+                                placeholderTextColor={colors.ink[300]}
+                            />
+                        </View>
+                        <View style={styles.gemRow}>
+                            <Gem size={18} kind="ruby" />
+                            <Text style={styles.gemLabel}>루비</Text>
+                            <TextInput
+                                style={styles.gemInput}
+                                value={form.costRuby}
+                                onChangeText={v => setForm(f => ({ ...f, costRuby: v }))}
+                                keyboardType="number-pad"
+                                placeholder="0"
                                 placeholderTextColor={colors.ink[300]}
                             />
                         </View>

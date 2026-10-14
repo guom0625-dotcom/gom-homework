@@ -8,7 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
 import { useAppStore, type CatalogItem, type OwnedReward } from '../../store/appStore';
-import { Gem } from '../../components/Gem';
+import { Price } from '../../components/Price';
 import { WEEK_MS } from '../../lib/days';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
@@ -19,10 +19,7 @@ type Tab = 'shop' | 'mine';
 function CostChips({ item }: { item: CatalogItem }) {
     return (
         <View style={styles.costRow}>
-            <View style={styles.costChip}>
-                <Gem size={14} />
-                <Text style={styles.costNum}>{item.cost}</Text>
-            </View>
+            <Price diamonds={item.cost} rubies={item.cost_ruby} />
             {item.kind === 'once' && (
                 <View style={[styles.costChip, styles.onceChip]}>
                     <Text style={styles.costNum}>딱 1번</Text>
@@ -41,7 +38,7 @@ const REWARD_STATUS: Record<OwnedReward['status'], string> = {
 // 상점: 다이아로 보상을 구매 → 내 보상에 쌓임 → "사용"을 누르면 매니저가 실제로 해주고 사용 완료 처리
 export function SpendScreen({ navigation }: Props) {
     const {
-        diamonds, catalog, rewards, rewardsSince, rewardsOlderUsedAt,
+        diamonds, rubies, catalog, rewards, rewardsSince, rewardsOlderUsedAt,
         fetchCatalog, fetchRewards, fetchMe, buyReward, requestUseReward,
     } = useAppStore();
     const [tab, setTab] = useState<Tab>('shop');
@@ -62,14 +59,21 @@ export function SpendScreen({ navigation }: Props) {
         setRefreshing(false);
     }, [load]);
 
+    // 다이아와 루비가 모두 가격만큼 있어야 살 수 있다
+    const canAfford = (item: CatalogItem) => diamonds >= item.cost && rubies >= item.cost_ruby;
+
     const handleBuy = (item: CatalogItem) => {
-        if (diamonds < item.cost) {
-            Alert.alert('다이아가 부족해요', '하루 할일을 모두 완료해서 다이아를 모아봐요!');
+        if (!canAfford(item)) {
+            Alert.alert('보석이 부족해요', '다이아는 하루 할일을 모두 완료하면, 루비는 책을 다 읽으면 받아요!');
             return;
         }
+        const price = [
+            item.cost > 0 ? `다이아 ${item.cost}개` : '',
+            item.cost_ruby > 0 ? `루비 ${item.cost_ruby}개` : '',
+        ].filter(Boolean).join(' + ');
         Alert.alert(
             `"${item.title}" 구매`,
-            `다이아 ${item.cost}개로 구매할까요?`,
+            `${price}로 구매할까요?`,
             [
                 { text: '취소', style: 'cancel' },
                 {
@@ -82,7 +86,7 @@ export function SpendScreen({ navigation }: Props) {
                         } catch (e: unknown) {
                             const msg = e instanceof Error ? e.message : '오류';
                             Alert.alert('오류',
-                                msg === 'insufficient_gems' ? '다이아가 부족해요'
+                                msg === 'insufficient_gems' ? '보석이 부족해요'
                                 : msg === 'catalog_item_not_found' ? '이미 팔렸거나 없어진 보상이에요'
                                 : msg);
                             load();
@@ -138,10 +142,7 @@ export function SpendScreen({ navigation }: Props) {
                     <Text style={styles.backText}>‹</Text>
                 </TouchableOpacity>
                 <Text style={styles.title}>보상 상점</Text>
-                <View style={styles.balanceChip}>
-                    <Gem size={16} />
-                    <Text style={styles.balanceNum}>{diamonds}</Text>
-                </View>
+                <Price diamonds={diamonds} rubies={rubies} size={15} showZero />
             </View>
 
             <View style={styles.tabs}>
@@ -169,7 +170,7 @@ export function SpendScreen({ navigation }: Props) {
                         </View>
                     }
                     renderItem={({ item }) => {
-                        const affordable = diamonds >= item.cost;
+                        const affordable = canAfford(item);
                         return (
                             <View style={[styles.card, !affordable && styles.cardDisabled]}>
                                 <View style={styles.cardBody}>

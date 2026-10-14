@@ -66,6 +66,9 @@ export function DashboardScreen({ navigation }: Props) {
         }
     };
 
+    // 관리 메뉴 안에서 처리할 것: 보상 사용 요청 + 책 완료 요청
+    const menuBadge = pendingUse + students.reduce((sum, s) => sum + s.pending_books, 0);
+
     const handleRename = async (id: string) => {
         const name = editingName.trim();
         if (!name) { Alert.alert('이름을 입력해주세요'); return; }
@@ -98,9 +101,9 @@ export function DashboardScreen({ navigation }: Props) {
                 </View>
                 <TouchableOpacity onPress={() => navigation.navigate('ManagerMenu')} style={styles.menuBtn}>
                     <Text style={styles.menuText}>⚙️ 관리</Text>
-                    {pendingUse > 0 && (
+                    {menuBadge > 0 && (
                         <View style={styles.menuBadge}>
-                            <Text style={styles.menuBadgeText}>{pendingUse}</Text>
+                            <Text style={styles.menuBadgeText}>{menuBadge}</Text>
                         </View>
                     )}
                 </TouchableOpacity>
@@ -151,8 +154,9 @@ export function DashboardScreen({ navigation }: Props) {
                                 <>
                                     <Text style={styles.studentName}>{item.name}</Text>
                                     <Text style={styles.studentPoints}>
-                                        💎 {item.diamonds.toLocaleString()}개
+                                        💎 {item.diamonds.toLocaleString()} · ♦️ {item.rubies.toLocaleString()}
                                         {item.pending_review > 0 ? ` · ⏳ 검토 대기 ${item.pending_review}개` : ''}
+                                        {item.pending_books > 0 ? ` · 📚 책 완료 요청 ${item.pending_books}권` : ''}
                                     </Text>
                                     {item.today_total === 0 && (
                                         <View style={styles.nudgeRow}>

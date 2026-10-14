@@ -18,6 +18,9 @@ import { CatalogScreen } from '../screens/manager/CatalogScreen';
 import { DeadlineSettingsScreen } from '../screens/manager/DeadlineSettings';
 import { RewardUseScreen } from '../screens/manager/RewardUseScreen';
 import { SpendScreen } from '../screens/student/SpendScreen';
+import { BooksScreen } from '../screens/student/BooksScreen';
+import { BookRegisterScreen } from '../screens/student/BookRegister';
+import { BookReviewScreen } from '../screens/manager/BookReviewScreen';
 import { ProfileScreen } from '../screens/student/ProfileScreen';
 import { colors, fontFamilies, fontSizes, radius } from '../theme';
 
@@ -33,6 +36,8 @@ export type StudentStackParams = {
     // task 가 있으면 반려된 계획을 고쳐서 다시 상신하는 수정 모드
     TaskRegister: { day: number; task?: { id: string; title: string; memo: string | null } };
     Spend: undefined;
+    Books: undefined;
+    BookRegister: undefined;
     Profile: undefined;
 };
 
@@ -43,6 +48,7 @@ export type ManagerStackParams = {
     DeadlineSettings: undefined;
     Catalog: undefined;
     RewardUse: undefined;
+    BookReview: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
@@ -57,6 +63,8 @@ function StudentNavigator() {
             <StudentStack.Screen name="TaskList" component={TaskListScreen} />
             <StudentStack.Screen name="TaskRegister" component={TaskRegisterScreen} />
             <StudentStack.Screen name="Spend" component={SpendScreen} />
+            <StudentStack.Screen name="Books" component={BooksScreen} />
+            <StudentStack.Screen name="BookRegister" component={BookRegisterScreen} />
             <StudentStack.Screen name="Profile" component={ProfileScreen} />
         </StudentStack.Navigator>
     );
@@ -71,6 +79,7 @@ function ManagerNavigator() {
             <ManagerStack.Screen name="Catalog" component={CatalogScreen} />
             <ManagerStack.Screen name="DeadlineSettings" component={DeadlineSettingsScreen} />
             <ManagerStack.Screen name="RewardUse" component={RewardUseScreen} />
+            <ManagerStack.Screen name="BookReview" component={BookReviewScreen} />
         </ManagerStack.Navigator>
     );
 }

@@ -31,9 +31,10 @@ export function registerMeRoutes(app: FastifyInstance, db: Db, auth: AuthHandler
             : studentDeadlines(db, req.user.id), { register_deadline_enabled: REGISTER_DEADLINE_ENABLED });
 
         if (user.role === 'student') {
-            const balance = db.prepare('SELECT diamond FROM gems_balance WHERE student_id = ?')
-                .get(req.user.id) as { diamond: number } | undefined;
+            const balance = db.prepare('SELECT diamond, ruby FROM gems_balance WHERE student_id = ?')
+                .get(req.user.id) as { diamond: number; ruby: number } | undefined;
             result.diamonds = balance?.diamond ?? 0;
+            result.rubies = balance?.ruby ?? 0;
             result.streak = currentStreak(db, req.user.id);
 
             const link = db.prepare(`

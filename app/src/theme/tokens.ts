@@ -36,6 +36,8 @@ export const colors = {
   },
   // 보석은 다이아 한 종류 — [light, mid, dark]
   diamond: ['#dff4ff', '#5cc4ff', '#1f86d6'],
+  // 루비 — 책 한 권을 다 읽으면 받는 보석
+  ruby:    ['#ffd9e1', '#ff5a7a', '#c4304f'],
   paper:  '#fffaf2',
   paper2: '#fdf3df',
   card:   '#ffffff',
@@ -96,6 +98,7 @@ export const gradients = {
 
   // TopHud gem chip
   gemChip: ['#eaf7ff', '#c2e8ff'],
+  rubyChip: ['#fff1f4', '#ffd2dc'],
 } as const;
 
 // RN shadow (iOS 기준, Android elevation도 함께)
