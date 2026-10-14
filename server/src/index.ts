@@ -17,7 +17,7 @@ import { registerStudentRoutes } from './routes/students.ts';
 import { registerSettingsRoutes } from './routes/settings.ts';
 import { DAY_REWARD, settlePastDays } from './lib/gems.ts';
 import { todayKST } from './lib/days.ts';
-import { sendPush } from './lib/push.ts';
+import { sendPushToUser } from './lib/push.ts';
 
 export type AuthHandler = ReturnType<typeof makeAuth>;
 
@@ -47,9 +47,7 @@ const settle = (full = false) => {
         const rewarded = settlePastDays(db, full ? 0 : todayKST(now - SETTLE_LOOKBACK_DAYS * 86_400_000));
         if (rewarded.length > 0) app.log.info({ rewarded }, 'day rewards settled');
         for (const { studentId } of rewarded) {
-            const student = db.prepare('SELECT push_token FROM users WHERE id = ?').get(studentId) as
-                { push_token: string | null } | undefined;
-            void sendPush(student?.push_token, {
+            void sendPushToUser(db, studentId, {
                 title: '할일 모두 완료!',
                 body: `다이아 ${DAY_REWARD}개를 받았어요 💎`,
                 data: { type: 'day_rewarded' },

@@ -4,7 +4,7 @@ import type { Db } from '../db.ts';
 import type { AuthHandler } from '../index.ts';
 import { monthProgress } from '../lib/gems.ts';
 import { todayKST } from '../lib/days.ts';
-import { sendPush } from '../lib/push.ts';
+import { sendPushToUser } from '../lib/push.ts';
 
 export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHandler): void {
     // GET /students  (manager only — 연결된 학생 + 다이아 잔고 + 오늘 할일 현황)
@@ -43,9 +43,7 @@ export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHa
         ).get(id, todayKST());
         if (registered) return reply.code(409).send({ error: 'already_registered' });
 
-        const student = db.prepare('SELECT push_token FROM users WHERE id = ?').get(id) as
-            { push_token: string | null };
-        const delivered = await sendPush(student.push_token, {
+        const delivered = await sendPushToUser(db, id, {
             title: '오늘의 할일을 등록해요 📝',
             body: `${req.user.name}님이 기다리고 있어요`,
             data: { type: 'nudge_register' },
@@ -76,6 +74,7 @@ export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHa
                 db.prepare(`DELETE FROM ${table} WHERE student_id = ?`).run(id);
             }
             db.prepare('DELETE FROM auth_keys WHERE user_id = ?').run(id);
+            db.prepare('DELETE FROM push_tokens WHERE user_id = ?').run(id);
             db.prepare('DELETE FROM users WHERE id = ?').run(id);
             return true;
         })();

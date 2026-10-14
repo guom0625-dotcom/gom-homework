@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Db } from '../db.ts';
 import type { AuthHandler } from '../index.ts';
 import { GEM_TYPE } from '../lib/gems.ts';
-import { sendPush } from '../lib/push.ts';
+import { sendPushToUser } from '../lib/push.ts';
 
 interface CatalogRow {
     id: string;
@@ -24,10 +24,6 @@ interface OwnedRow {
 
 // 보상 구매 → 보유 → 사용 요청 → 매니저 사용 완료
 export function registerRewardRoutes(app: FastifyInstance, db: Db, auth: AuthHandler): void {
-    const pushToken = (userId: string): string | null | undefined =>
-        (db.prepare('SELECT push_token FROM users WHERE id = ?').get(userId) as
-            { push_token: string | null } | undefined)?.push_token;
-
     const userName = (userId: string): string =>
         (db.prepare('SELECT name FROM users WHERE id = ?').get(userId) as { name: string }).name;
 
@@ -71,7 +67,7 @@ export function registerRewardRoutes(app: FastifyInstance, db: Db, auth: AuthHan
 
         if (!result.ok) return reply.code(result.code).send({ error: result.error });
 
-        await sendPush(pushToken(result.item.manager_id), {
+        await sendPushToUser(db, result.item.manager_id, {
             title: `${userName(req.user.id)}가 보상을 구매했어요`,
             body: result.item.title,
             data: { type: 'reward_purchased', reward_id: result.ownedId },
@@ -129,7 +125,7 @@ export function registerRewardRoutes(app: FastifyInstance, db: Db, auth: AuthHan
         const manager = db.prepare(
             'SELECT manager_id FROM manager_student_link WHERE student_id = ?'
         ).get(req.user.id) as { manager_id: string } | undefined;
-        await sendPush(manager && pushToken(manager.manager_id), {
+        await sendPushToUser(db, manager?.manager_id, {
             title: `${userName(req.user.id)}가 보상을 쓰고 싶어해요`,
             body: reward.title,
             data: { type: 'reward_use_requested', reward_id: id },
@@ -155,7 +151,7 @@ export function registerRewardRoutes(app: FastifyInstance, db: Db, auth: AuthHan
 
         db.prepare("UPDATE owned_rewards SET status = 'used', used_at = ? WHERE id = ?").run(Date.now(), id);
 
-        await sendPush(pushToken(reward.student_id), {
+        await sendPushToUser(db, reward.student_id, {
             title: '보상 사용 완료!',
             body: reward.title,
             data: { type: 'reward_used', reward_id: id },

@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
-    View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Alert,
+    View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -11,6 +11,7 @@ import { useAppStore, type OwnedReward } from '../../store/appStore';
 import { useAuthStore } from '../../store/authStore';
 import { api } from '../../api/client';
 import { formatDay } from '../../lib/days';
+import { isPushEnabledOnDevice, setPushEnabledOnDevice } from '../../lib/pushDevice';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'ManagerMenu'> };
@@ -23,13 +24,24 @@ export function ManagerMenuScreen({ navigation }: Props) {
     const { students, fetchStudents } = useAppStore();
     const [loginCodeFor, setLoginCodeFor] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [pushOn, setPushOn] = useState(true);
 
     useFocusEffect(useCallback(() => {
         api<OwnedReward[]>('/rewards?status=use_requested')
             .then(list => setPendingUse(list.length))
             .catch(() => {});
         fetchStudents().catch(() => {});
+        isPushEnabledOnDevice().then(setPushOn).catch(() => {});
     }, []));
+
+    // 같은 매니저 계정을 여러 폰에서 쓸 때, 알림은 받고 싶은 폰에서만 켜 둔다
+    const togglePush = async (next: boolean) => {
+        setPushOn(next);
+        const registered = await setPushEnabledOnDevice(next);
+        if (next && !registered) {
+            Alert.alert('알림을 켤 수 없어요', '폰 설정에서 이 앱의 알림 권한을 허용해주세요');
+        }
+    };
 
     // 로그아웃했거나 폰을 바꾼 학생이 원래 계정으로 다시 들어갈 코드
     const handleLoginCode = async (studentId: string, name: string) => {
@@ -133,6 +145,19 @@ export function ManagerMenuScreen({ navigation }: Props) {
                     desc="할일 완료 마감 · 다이아 지급 시각"
                     onPress={() => navigation.navigate('DeadlineSettings')}
                 />
+                <View style={styles.item}>
+                    <Text style={styles.itemIcon}>🔔</Text>
+                    <View style={styles.itemBody}>
+                        <Text style={styles.itemLabel}>이 폰에서 알림 받기</Text>
+                        <Text style={styles.itemDesc}>같은 계정을 쓰는 다른 폰에는 영향이 없어요</Text>
+                    </View>
+                    <Switch
+                        value={pushOn}
+                        onValueChange={togglePush}
+                        trackColor={{ true: colors.ocean[300], false: colors.ink[200] }}
+                        thumbColor={pushOn ? colors.ocean[500] : colors.ink[100]}
+                    />
+                </View>
                 <MenuItem
                     icon="🔗"
                     label="학생 초대 코드 생성"

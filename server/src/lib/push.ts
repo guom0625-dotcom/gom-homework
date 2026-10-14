@@ -3,6 +3,7 @@
 //  · ExponentPushToken[...] → Expo Push 서비스
 import { createSign } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
+import type { Db } from '../db.ts';
 
 export interface PushMessage {
     title?: string;
@@ -56,9 +57,12 @@ async function accessToken(sa: ServiceAccount): Promise<string> {
     return json.access_token;
 }
 
-async function sendFcm(token: string, msg: PushMessage): Promise<boolean> {
+// 'dead' = 그 기기에서 앱이 지워졌거나 토큰이 폐기됨 → 더 보내지 않도록 지운다
+type SendResult = 'ok' | 'dead' | 'fail';
+
+async function sendFcm(token: string, msg: PushMessage): Promise<SendResult> {
     const sa = serviceAccount();
-    if (!sa) return false;
+    if (!sa) return 'fail';
 
     // FCM data 값은 문자열만 허용
     const data = Object.fromEntries(Object.entries(msg.data ?? {}).map(([k, v]) => [k, String(v)]));
@@ -74,24 +78,39 @@ async function sendFcm(token: string, msg: PushMessage): Promise<boolean> {
             },
         }),
     });
-    return res.ok;
+    if (res.ok) return 'ok';
+    return res.status === 404 ? 'dead' : 'fail';
 }
 
-async function sendExpo(token: string, msg: PushMessage): Promise<boolean> {
+async function sendExpo(token: string, msg: PushMessage): Promise<SendResult> {
     const res = await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ to: token, sound: 'default', ...msg }),
     });
-    return res.ok;
+    return res.ok ? 'ok' : 'fail';
 }
 
-/** 발송 요청이 받아들여졌으면 true. 토큰이 없거나 설정이 안 됐거나 실패하면 false. */
-export async function sendPush(token: string | null | undefined, msg: PushMessage): Promise<boolean> {
-    if (!token) return false;
+async function sendOne(token: string, msg: PushMessage): Promise<SendResult> {
     try {
         return token.startsWith('ExponentPushToken[') ? await sendExpo(token, msg) : await sendFcm(token, msg);
     } catch {
-        return false;
+        return 'fail';
     }
+}
+
+/**
+ * 그 계정으로 알림을 켜 둔 모든 기기에 발송. 한 대라도 접수되면 true.
+ * 기기가 없거나 설정이 안 됐거나 전부 실패하면 false.
+ */
+export async function sendPushToUser(db: Db, userId: string | null | undefined, msg: PushMessage): Promise<boolean> {
+    if (!userId) return false;
+    const tokens = (db.prepare('SELECT token FROM push_tokens WHERE user_id = ?').all(userId) as { token: string }[])
+        .map((r) => r.token);
+
+    const results = await Promise.all(tokens.map((t) => sendOne(t, msg)));
+    results.forEach((r, i) => {
+        if (r === 'dead') db.prepare('DELETE FROM push_tokens WHERE token = ?').run(tokens[i]);
+    });
+    return results.includes('ok');
 }

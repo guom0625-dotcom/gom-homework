@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { api, ApiError, setApiKey } from '../api/client';
+import { unregisterDeviceFromPush } from '../lib/pushDevice';
 
 const STORE_KEY = 'gom_auth_key';
 
@@ -96,8 +97,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     },
 
     logout: async () => {
-        // 로그아웃한 기기로 알림이 계속 가지 않도록 토큰 해제
-        await api('/me', { method: 'PATCH', body: JSON.stringify({ push_token: null }) }).catch(() => {});
+        // 로그아웃한 이 기기로 알림이 계속 가지 않도록 해제 (같은 계정의 다른 폰은 그대로)
+        await unregisterDeviceFromPush();
         await SecureStore.deleteItemAsync(STORE_KEY).catch(() => {});
         setApiKey(null);
         set({ user: null, key: null, needsPairing: false });

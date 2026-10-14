@@ -97,7 +97,7 @@ export function registerAuthRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             db.prepare(
                 'UPDATE auth_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL'
             ).run(now, user.id);
-            db.prepare('UPDATE users SET push_token = NULL WHERE id = ?').run(user.id);
+            db.prepare('DELETE FROM push_tokens WHERE user_id = ?').run(user.id);
             const key = makeKey();
             db.prepare(
                 'INSERT INTO auth_keys (key_hash, user_id, created_at) VALUES (?, ?, ?)'

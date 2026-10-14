@@ -6,7 +6,7 @@ import type { AuthHandler } from '../index.ts';
 import { DAY_REWARD, settleDay } from '../lib/gems.ts';
 import { todayKST } from '../lib/days.ts';
 import { canRegister, isDayClosed, studentDeadlines } from '../lib/deadlines.ts';
-import { sendPush } from '../lib/push.ts';
+import { sendPushToUser, type PushMessage } from '../lib/push.ts';
 
 const CreateBody = z.object({
     day: z.number().int().positive(),
@@ -38,15 +38,14 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             'SELECT 1 FROM manager_student_link WHERE manager_id = ? AND student_id = ?'
         ).get(managerId, studentId);
 
-    const managerPushToken = (studentId: string): string | null | undefined =>
-        (db.prepare(`
-            SELECT u.push_token FROM manager_student_link l
-            JOIN users u ON u.id = l.manager_id
-            WHERE l.student_id = ?
-        `).get(studentId) as { push_token: string | null } | undefined)?.push_token;
+    const pushTo = (userId: string, msg: PushMessage) => sendPushToUser(db, userId, msg);
 
-    const userPushToken = (userId: string): string | null =>
-        (db.prepare('SELECT push_token FROM users WHERE id = ?').get(userId) as { push_token: string | null }).push_token;
+    const pushToManagerOf = (studentId: string, msg: PushMessage) => {
+        const link = db.prepare(
+            'SELECT manager_id FROM manager_student_link WHERE student_id = ?'
+        ).get(studentId) as { manager_id: string } | undefined;
+        return sendPushToUser(db, link?.manager_id, msg);
+    };
 
     const userName = (userId: string): string =>
         (db.prepare('SELECT name FROM users WHERE id = ?').get(userId) as { name: string }).name;
@@ -119,7 +118,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             VALUES (?, ?, ?, ?, ?, 'plan_submitted', ?)
         `).run(id, req.user.id, day, title, memo ?? null, Date.now());
 
-        await sendPush(managerPushToken(req.user.id), {
+        await pushToManagerOf(req.user.id, {
             title: `${userName(req.user.id)}의 계획 상신`,
             body: title,
             data: { type: 'plan_submitted', task_id: id },
@@ -146,7 +145,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             "UPDATE tasks SET title = ?, memo = ?, status = 'plan_submitted' WHERE id = ?"
         ).run(body.data.title, body.data.memo ?? null, id);
 
-        await sendPush(managerPushToken(req.user.id), {
+        await pushToManagerOf(req.user.id, {
             title: `${userName(req.user.id)}의 계획 수정 상신`,
             body: body.data.title,
             data: { type: 'plan_submitted', task_id: id },
@@ -169,7 +168,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
 
         db.prepare("UPDATE tasks SET status = 'plan_submitted' WHERE id = ?").run(id);
 
-        await sendPush(managerPushToken(req.user.id), {
+        await pushToManagerOf(req.user.id, {
             title: `${userName(req.user.id)}의 계획 상신`,
             body: task.title,
             data: { type: 'plan_submitted', task_id: id },
@@ -192,7 +191,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             "UPDATE tasks SET status = 'plan_approved', reviewed_at = ? WHERE id = ?"
         ).run(Date.now(), id);
 
-        await sendPush(userPushToken(task.student_id), {
+        await pushTo(task.student_id, {
             title: '계획 승인!',
             body: `"${task.title}" 이제 실행해봐요`,
             data: { type: 'plan_approved', task_id: id },
@@ -217,7 +216,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             "UPDATE tasks SET status = 'plan_rejected', reviewed_at = ? WHERE id = ?"
         ).run(Date.now(), id);
 
-        await sendPush(userPushToken(task.student_id), {
+        await pushTo(task.student_id, {
             title: '계획 수정이 필요해요',
             body: `"${task.title}" — ${body.data.reason ?? '계획을 수정하고 다시 상신해주세요'}`,
             data: { type: 'plan_rejected', task_id: id },
@@ -242,7 +241,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             "UPDATE tasks SET status = 'submitted', submitted_at = ? WHERE id = ?"
         ).run(Date.now(), id);
 
-        await sendPush(managerPushToken(req.user.id), {
+        await pushToManagerOf(req.user.id, {
             title: `${userName(req.user.id)}가 제출했어요`,
             body: task.title,
             data: { type: 'task_submitted', task_id: id },
@@ -267,7 +266,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         ).run(Date.now(), id);
         const dayRewarded = settleDay(db, task.student_id, task.day);
 
-        await sendPush(userPushToken(task.student_id), {
+        await pushTo(task.student_id, {
             title: '할일 승인!',
             body: dayRewarded ? `"${task.title}" 완료 — 다이아 ${DAY_REWARD}개를 받았어요` : `"${task.title}" 완료`,
             data: { type: 'task_approved', task_id: id },
@@ -292,7 +291,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             "UPDATE tasks SET status = 'rejected', reviewed_at = ? WHERE id = ?"
         ).run(Date.now(), id);
 
-        await sendPush(userPushToken(task.student_id), {
+        await pushTo(task.student_id, {
             title: '다시 확인해봐요',
             body: `"${task.title}" — ${body.data.reason ?? '수정 후 다시 제출해주세요'}`,
             data: { type: 'task_rejected', task_id: id },
@@ -317,7 +316,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             "UPDATE tasks SET status = 'delete_requested', prev_status = ? WHERE id = ?"
         ).run(task.status, id);
 
-        await sendPush(managerPushToken(req.user.id), {
+        await pushToManagerOf(req.user.id, {
             title: `${userName(req.user.id)}의 할일 삭제 요청`,
             body: task.title,
             data: { type: 'delete_requested', task_id: id },
@@ -354,7 +353,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         // 지난 날의 마지막 미결 할일이 사라져 남은 게 전부 승인 상태가 됐으면 정산
         const dayRewarded = settleDay(db, task.student_id, task.day);
 
-        await sendPush(userPushToken(task.student_id), {
+        await pushTo(task.student_id, {
             title: '할일 삭제 승인',
             body: `"${task.title}" 삭제됐어요`,
             data: { type: 'delete_approved', task_id: id },
@@ -376,7 +375,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         const restored = task.prev_status ?? 'todo';
         db.prepare('UPDATE tasks SET status = ?, prev_status = NULL WHERE id = ?').run(restored, id);
 
-        await sendPush(userPushToken(task.student_id), {
+        await pushTo(task.student_id, {
             title: '할일 삭제가 반려됐어요',
             body: `"${task.title}" 은(는) 그대로 해야 해요`,
             data: { type: 'delete_rejected', task_id: id },
