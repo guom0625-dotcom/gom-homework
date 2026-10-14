@@ -14,8 +14,7 @@ import { registerRulesRoutes } from './routes/rules.ts';
 import { registerCatalogRoutes } from './routes/catalog.ts';
 import { registerRewardRoutes } from './routes/rewards.ts';
 import { registerStudentRoutes } from './routes/students.ts';
-import { DAY_REWARD, settlePastDays } from './lib/gems.ts';
-import { todayKST } from './lib/days.ts';
+import { DAY_REWARD, settlePastDays, settlementCutoffDay } from './lib/gems.ts';
 import { sendPush } from './lib/push.ts';
 
 export type AuthHandler = ReturnType<typeof makeAuth>;
@@ -32,12 +31,12 @@ app.decorateRequest('user', null as unknown as import('./auth.ts').AuthUser);
 
 const auth = makeAuth(db);
 
-// 하루 보상 정산: 전날 할일이 전부 승인된 학생에게 다이아 지급.
+// 하루 보상 정산: 전날 할일이 전부 승인된 학생에게 다이아 지급 (매일 오전 6시 KST).
 // 서버가 폰에서 돌아 기기가 절전에 들어가면 타이머가 멈추므로 "자정에 한 번 울리는 타이머"는 믿을 수 없다.
-// 대신 날짜(KST)가 바뀌었는지를 짧은 주기와 모든 요청에서 벽시계 기준으로 확인해, 바뀌었으면 그때 정산한다.
+// 대신 지급 시각이 지났는지를 짧은 주기와 모든 요청에서 벽시계 기준으로 확인해, 지났으면 그때 정산한다.
 let settledDay = 0;
 const settleIfDayChanged = () => {
-    const today = todayKST();
+    const today = settlementCutoffDay();
     if (today === settledDay) return;
     try {
         const rewarded = settlePastDays(db);
