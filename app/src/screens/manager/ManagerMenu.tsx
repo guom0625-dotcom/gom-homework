@@ -130,7 +130,7 @@ export function ManagerMenuScreen({ navigation }: Props) {
                 <MenuItem
                     icon="⏰"
                     label="마감시간 설정"
-                    desc="할일 등록 마감, 완료 마감 · 다이아 지급 시각"
+                    desc="할일 완료 마감 · 다이아 지급 시각"
                     onPress={() => navigation.navigate('DeadlineSettings')}
                 />
                 <MenuItem

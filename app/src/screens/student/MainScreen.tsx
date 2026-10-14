@@ -61,10 +61,12 @@ export function MainScreen() {
   const { user } = useAuthStore();
   const {
     today, joinedDay, dayStatus, diamonds, streak, monthProgress, character, avatar, fetchMe,
-    registerDeadlineMin, completeDeadlineMin,
+    registerDeadlineMin, registerDeadlineEnabled, completeDeadlineMin,
   } = useAppStore();
   // dayStatus 가 todo 가 아니면 오늘 등록한 할일이 있다는 뜻 → 등록 마감이 지나도 추가 가능
-  const registerOpen = canRegisterOn(today, today, dayStatus !== 'todo', registerDeadlineMin, completeDeadlineMin);
+  const registerOpen = canRegisterOn(
+    today, today, dayStatus !== 'todo', registerDeadlineEnabled ? registerDeadlineMin : null, completeDeadlineMin,
+  );
 
   // 화면 포커스 시 데이터 갱신 + 포커스 유지 중 30초 폴링
   useFocusEffect(useCallback(() => {
@@ -181,7 +183,7 @@ export function MainScreen() {
             </View>
             <Text style={styles.daySub}>
               {m}월의 섬 {days.length}개 · 정복한 섬 {doneDays.size}개{'\n'}
-              등록 마감 {formatDeadline(registerDeadlineMin)} · 완료 마감 {formatDeadline(completeDeadlineMin)}
+              {registerDeadlineEnabled ? `등록 마감 ${formatDeadline(registerDeadlineMin)} · ` : ''}완료 마감 {formatDeadline(completeDeadlineMin)}
             </Text>
           </View>
         )}

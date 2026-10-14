@@ -7,6 +7,10 @@ export interface Deadlines {
     complete_deadline_min: number;  // 완료 상신 마감 = 다이아 지급 시각 (다음날 정오까지 가능)
 }
 
+// 등록 마감은 일단 꺼 둔다. 다시 쓰려면 server/.env 에 REGISTER_DEADLINE_ENABLED=true 를 넣고 서버를 재시작
+// (앱은 /me 로 이 값을 받아 화면을 맞추므로 새 빌드가 필요 없다)
+export const REGISTER_DEADLINE_ENABLED = process.env.REGISTER_DEADLINE_ENABLED === 'true';
+
 export const DEFAULT_DEADLINES: Deadlines = { register_deadline_min: 1440, complete_deadline_min: 1800 };
 export const MAX_REGISTER_MIN = 1440;
 export const MAX_COMPLETE_MIN = 2160;
@@ -43,6 +47,7 @@ export function studentDeadlines(db: Db, studentId: string): Deadlines {
  */
 export function canRegister(d: Deadlines, day: number, hasTasks: boolean, now: number = Date.now()): boolean {
     if (day !== todayKST(now) || isDayClosed(d, day, now)) return false;
+    if (!REGISTER_DEADLINE_ENABLED) return true;
     return hasTasks || now < dayStartMs(day) + d.register_deadline_min * 60_000;
 }
 

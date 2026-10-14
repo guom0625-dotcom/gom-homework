@@ -43,11 +43,13 @@ const STATUS_COLOR: Record<Task['status'], string> = {
 export function TaskListScreen({ navigation, route }: Props) {
     const { day } = route.params;
     const {
-        today, tasks, registerDeadlineMin, completeDeadlineMin,
+        today, tasks, registerDeadlineMin, registerDeadlineEnabled, completeDeadlineMin,
         fetchTasks, submitTask, submitPlan, requestDeleteTask, cancelDeleteTask,
     } = useAppStore();
     // 새 할일 등록은 오늘의 등록 마감 전까지(이미 등록한 게 있으면 완료 마감 전까지), 상신·수정·삭제 요청은 그 날의 완료 마감 전까지
-    const canAdd = canRegisterOn(day, today, tasks.length > 0, registerDeadlineMin, completeDeadlineMin);
+    const canAdd = canRegisterOn(
+        day, today, tasks.length > 0, registerDeadlineEnabled ? registerDeadlineMin : null, completeDeadlineMin,
+    );
     const isOpen = isDayOpen(day, completeDeadlineMin);
     const [refreshing, setRefreshing] = useState(false);
     const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -123,7 +125,7 @@ export function TaskListScreen({ navigation, route }: Props) {
 
             {isOpen && (
                 <Text style={styles.deadlineInfo}>
-                    {day === today ? `등록 마감 ${formatDeadline(registerDeadlineMin)} · ` : ''}
+                    {day === today && registerDeadlineEnabled ? `등록 마감 ${formatDeadline(registerDeadlineMin)} · ` : ''}
                     완료 마감 {formatDeadline(completeDeadlineMin)}
                 </Text>
             )}

@@ -68,6 +68,7 @@ interface MeData {
     today: number;
     register_deadline_min?: number;
     complete_deadline_min?: number;
+    register_deadline_enabled?: boolean;
     joined_day?: number;
     diamonds?: number;
     streak?: number;
@@ -79,13 +80,15 @@ interface MeData {
 
 /**
  * 이 날짜에 새 할일을 등록할 수 있는가.
- * 등록 마감은 그날 하나도 등록하지 않았을 때만 걸린다 — 이미 등록한 할일이 있으면(hasTasks) 완료 마감 전까지 추가 가능
+ * 등록 마감(서버에서 켰을 때만)은 그날 하나도 등록하지 않았을 때만 걸린다 —
+ * 이미 등록한 할일이 있으면(hasTasks) 완료 마감 전까지 추가 가능
  */
 export function canRegisterOn(
     day: number, today: number, hasTasks: boolean,
-    registerDeadlineMin: number, completeDeadlineMin: number,
+    registerDeadlineMin: number | null, completeDeadlineMin: number,
 ): boolean {
     if (day !== today || !isDayOpen(day, completeDeadlineMin)) return false;
+    if (registerDeadlineMin == null) return true;
     return hasTasks || Date.now() < dayStartMs(day) + registerDeadlineMin * 60_000;
 }
 
@@ -108,7 +111,8 @@ interface AppState {
     today: number;              // 서버 기준 오늘 (로딩 전 0)
     joinedDay: number;          // 가입한 날짜
     // 매니저가 정한 마감시간 — 그 날 0시로부터 몇 분 뒤인지
-    registerDeadlineMin: number;  // 새 할일 등록 마감
+    registerDeadlineMin: number;  // 새 할일 등록 마감 (registerDeadlineEnabled 일 때만 적용)
+    registerDeadlineEnabled: boolean;  // 서버에서 등록 마감 기능을 켰는지
     completeDeadlineMin: number;  // 완료 상신 마감 = 다이아 지급 시각
     streak: number;
     diamonds: number;
@@ -161,6 +165,7 @@ const initialState = {
     today: 0,
     joinedDay: 0,
     registerDeadlineMin: 1440,
+    registerDeadlineEnabled: false,
     completeDeadlineMin: 1800,
     streak: 0,
     diamonds: 0,
@@ -198,6 +203,7 @@ export const useAppStore = create<AppState>((set, get) => {
         set({
             me, today: me.today, joinedDay: me.joined_day ?? 0,
             registerDeadlineMin: me.register_deadline_min ?? 1440,
+            registerDeadlineEnabled: me.register_deadline_enabled ?? false,
             completeDeadlineMin: me.complete_deadline_min ?? 1800,
             diamonds: me.diamonds ?? 0, streak: me.streak ?? 0, character, avatar,
         });

@@ -11,7 +11,11 @@ import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'DeadlineSettings'> };
 
-interface Deadlines { register_deadline_min: number; complete_deadline_min: number }
+interface Deadlines {
+    register_deadline_min: number;
+    complete_deadline_min: number;
+    register_deadline_enabled?: boolean;  // 서버에서 등록 마감 기능을 켰는지 (기본 꺼짐)
+}
 
 const STEP = 30;            // 30분 단위
 const MIN = 30;
@@ -31,6 +35,8 @@ export function DeadlineSettingsScreen({ navigation }: Props) {
             .catch(() => Alert.alert('오류', '설정을 불러오지 못했어요'));
     }, []);
 
+    const registerEnabled = saved?.register_deadline_enabled ?? false;
+
     // 등록 마감은 완료 마감보다 늦을 수 없다 — 한쪽을 움직이면 다른 쪽을 따라 맞춘다
     const changeRegister = (delta: number) => {
         const next = Math.min(MAX_REGISTER, Math.max(MIN, register + delta));
@@ -40,7 +46,7 @@ export function DeadlineSettingsScreen({ navigation }: Props) {
     const changeComplete = (delta: number) => {
         const next = Math.min(MAX_COMPLETE, Math.max(MIN, complete + delta));
         setComplete(next);
-        if (register > next) setRegister(Math.min(next, MAX_REGISTER));
+        if (registerEnabled && register > next) setRegister(Math.min(next, MAX_REGISTER));
     };
 
     const dirty = saved != null
@@ -51,10 +57,15 @@ export function DeadlineSettingsScreen({ navigation }: Props) {
         try {
             const d = await api<Deadlines>('/settings', {
                 method: 'PUT',
-                body: JSON.stringify({ register_deadline_min: register, complete_deadline_min: complete }),
+                body: JSON.stringify({
+                    ...(registerEnabled ? { register_deadline_min: register } : {}),
+                    complete_deadline_min: complete,
+                }),
             });
             setSaved(d);
-            Alert.alert('저장했어요', `등록 마감 ${formatDeadline(d.register_deadline_min)}\n완료 마감 · 다이아 지급 ${formatDeadline(d.complete_deadline_min)}`);
+            Alert.alert('저장했어요',
+                (d.register_deadline_enabled ? `등록 마감 ${formatDeadline(d.register_deadline_min)}\n` : '')
+                + `완료 마감 · 다이아 지급 ${formatDeadline(d.complete_deadline_min)}`);
         } catch {
             Alert.alert('오류', '저장에 실패했어요');
         } finally {
@@ -76,12 +87,12 @@ export function DeadlineSettingsScreen({ navigation }: Props) {
                 <ActivityIndicator style={{ marginTop: 60 }} size="large" color={colors.ocean[500]} />
             ) : (
                 <ScrollView contentContainerStyle={styles.list}>
-                    <TimeRow
+                    {registerEnabled && <TimeRow
                         label="할일 등록 마감"
                         desc="이 시각까지 하나도 등록하지 않으면 그날은 할일을 등록할 수 없어요. 하나라도 등록해 뒀으면 완료 마감 전까지 추가·수정할 수 있어요."
                         value={register}
                         onChange={changeRegister}
-                    />
+                    />}
                     <TimeRow
                         label="할일 완료 마감 · 다이아 지급"
                         desc="이 시각까지 완료 상신을 해야 해요. 그날 할일이 전부 승인돼 있으면 이 시각에 다이아가 지급돼요. 다음날 낮 12시까지 정할 수 있어요."
