@@ -132,7 +132,7 @@ export function SpendScreen({ navigation }: Props) {
     const unusedCount = rewards.filter(r => r.status !== 'used').length;
 
     return (
-        <SafeAreaView style={styles.safe} edges={['top']}>
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
                     <Text style={styles.backText}>‹</Text>

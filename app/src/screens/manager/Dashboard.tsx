@@ -90,7 +90,7 @@ export function DashboardScreen({ navigation }: Props) {
     }
 
     return (
-        <SafeAreaView style={styles.safe} edges={['top']}>
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
             <View style={styles.header}>
                 <View>
                     <Text style={styles.greeting}>안녕하세요 👋</Text>

@@ -4,7 +4,7 @@ import {
   type AppStateStatus,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -56,6 +56,8 @@ function SideButton({ icon, label, onPress }: { icon: string; label: string; onP
 export function MainScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<StudentStackParams>>();
   const { width } = useWindowDimensions();
+  // 화면 아래 시스템 내비게이션바에 버튼이 가려지지 않도록 그 높이만큼 띄운다
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const {
     today, joinedDay, dayStatus, diamonds, streak, monthProgress, character, avatar, fetchMe,
@@ -241,7 +243,7 @@ export function MainScreen() {
           </ScrollView>
         </View>
 
-        <View style={styles.bottomSheet}>
+        <View style={[styles.bottomSheet, { paddingBottom: 16 + insets.bottom }]}>
           <StatusBanner status={dayStatus} />
 
           <View style={styles.actionRow}>
