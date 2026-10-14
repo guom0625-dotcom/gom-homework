@@ -266,6 +266,7 @@ export function MainScreen() {
           <View style={styles.actionRow}>
             <SideButton icon="📋" label="목록" onPress={() => navigation.navigate('TaskList', { day: today })} />
             <SideButton icon="📚" label="책읽기" onPress={() => navigation.navigate('Books')} />
+            <SideButton icon="🏠" label="내 방" onPress={() => navigation.navigate('MiniRoom')} />
             <SideButton icon="💎" label="상점" onPress={() => navigation.navigate('Spend')} />
             <SideButton icon="⚙️" label="설정" onPress={() => navigation.navigate('Profile')} />
           </View>

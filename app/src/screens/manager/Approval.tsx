@@ -181,7 +181,12 @@ export function ApprovalScreen({ navigation, route }: Props) {
                     <Text style={styles.backText}>‹</Text>
                 </TouchableOpacity>
                 <Text style={styles.title}>{studentName}의 할일</Text>
-                <View style={{ width: 36 }} />
+                <TouchableOpacity
+                    onPress={() => navigation.navigate('RoomVisit', { studentId, studentName })}
+                    style={styles.roomBtn}
+                >
+                    <Text style={styles.roomBtnText}>🏠 방</Text>
+                </TouchableOpacity>
             </View>
 
             {totalPending > 0 && (
@@ -371,6 +376,17 @@ const styles = StyleSheet.create({
     },
     backBtn: { padding: 4, width: 36 },
     backText: { fontSize: 28, color: colors.ink[700], lineHeight: 32 },
+    roomBtn: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: radius.pill,
+        backgroundColor: colors.paper2,
+    },
+    roomBtnText: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.sm,
+        color: colors.ink[700],
+    },
     title: {
         flex: 1,
         fontFamily: fontFamilies.display,
