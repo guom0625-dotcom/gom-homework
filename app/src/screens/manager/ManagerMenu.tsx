@@ -147,6 +147,12 @@ export function ManagerMenuScreen({ navigation }: Props) {
                     onPress={() => navigation.navigate('BookReview')}
                 />
                 <MenuItem
+                    icon="📊"
+                    label="주간 리포트"
+                    desc="아이별 한 주 요약 · 매주 일요일 저녁 8시에 알림"
+                    onPress={() => navigation.navigate('WeeklyReport')}
+                />
+                <MenuItem
                     icon="⏰"
                     label="마감시간 설정"
                     desc="할일 완료 마감 · 다이아 지급 시각"

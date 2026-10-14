@@ -15,11 +15,13 @@ import { colors, fontFamilies, fontSizes, radius } from '../../theme';
 type Props = { navigation: NativeStackNavigationProp<StudentStackParams, 'BookRegister'> };
 
 const PHOTO_WIDTH = 480;  // 서버에 올리는 책 사진 가로 크기 (세로는 비율대로)
+const THUMB_WIDTH = 160;  // 책장에 꽂히는 작은 표지
 
 // 책 등록 — 제목과 책 사진이 둘 다 있어야 등록된다. 매니저 승인 없이 바로 등록
 export function BookRegisterScreen({ navigation }: Props) {
     const [title, setTitle] = useState('');
     const [photo, setPhoto] = useState<string | null>(null);
+    const [thumb, setThumb] = useState<string | undefined>(undefined);
     const [loading, setLoading] = useState(false);
     const addBook = useAppStore(s => s.addBook);
 
@@ -37,11 +39,16 @@ export function BookRegisterScreen({ navigation }: Props) {
             : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
         if (result.canceled) return;
 
-        const context = ImageManipulator.manipulate(result.assets[0].uri);
-        context.resize({ width: PHOTO_WIDTH });
-        const imageRef = await context.renderAsync();
-        const compressed = await imageRef.saveAsync({ compress: 0.6, format: SaveFormat.JPEG, base64: true });
-        if (compressed.base64) setPhoto(`data:image/jpeg;base64,${compressed.base64}`);
+        const shrink = async (width: number) => {
+            const context = ImageManipulator.manipulate(result.assets[0].uri);
+            context.resize({ width });
+            const imageRef = await context.renderAsync();
+            const saved = await imageRef.saveAsync({ compress: 0.6, format: SaveFormat.JPEG, base64: true });
+            return saved.base64 ? `data:image/jpeg;base64,${saved.base64}` : null;
+        };
+        const [big, small] = await Promise.all([shrink(PHOTO_WIDTH), shrink(THUMB_WIDTH)]);
+        if (big) setPhoto(big);
+        setThumb(small ?? undefined);
     };
 
     const handlePickPhoto = () => {
@@ -57,7 +64,7 @@ export function BookRegisterScreen({ navigation }: Props) {
         if (!photo) { Alert.alert('책 사진을 넣어주세요', '책 표지를 찍거나 갤러리에서 골라주세요'); return; }
         setLoading(true);
         try {
-            await addBook(title.trim(), photo);
+            await addBook(title.trim(), photo, thumb);
             navigation.goBack();
         } catch (e: unknown) {
             Alert.alert('오류', errorMessage(e, '등록 실패'));

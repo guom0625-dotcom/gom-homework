@@ -149,6 +149,7 @@ export function TaskListScreen({ navigation, route }: Props) {
                         <View style={styles.taskMain}>
                             <Text style={styles.taskTitle}>{item.title}</Text>
                             {item.memo ? <Text style={styles.taskMemo}>{item.memo}</Text> : null}
+                            {item.praise ? <Text style={styles.praise}>💬 {item.praise}</Text> : null}
                         </View>
                         <View style={styles.taskRight}>
                             <Text style={[styles.statusBadge, { color: STATUS_COLOR[item.status] }]}>
@@ -279,6 +280,12 @@ const styles = StyleSheet.create({
     statusBadge: {
         fontFamily: fontFamilies.bodyMed,
         fontSize: fontSizes.xs,
+    },
+    praise: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.sm,
+        color: colors.ocean[700],
+        marginTop: 4,
     },
     deadlineInfo: {
         fontFamily: fontFamilies.bodyMed,

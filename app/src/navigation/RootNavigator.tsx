@@ -21,6 +21,8 @@ import { SpendScreen } from '../screens/student/SpendScreen';
 import { BooksScreen } from '../screens/student/BooksScreen';
 import { BookRegisterScreen } from '../screens/student/BookRegister';
 import { BookReviewScreen } from '../screens/manager/BookReviewScreen';
+import { BookShelfScreen } from '../screens/student/BookShelfScreen';
+import { WeeklyReportScreen } from '../screens/manager/WeeklyReportScreen';
 import { ProfileScreen } from '../screens/student/ProfileScreen';
 import { colors, fontFamilies, fontSizes, radius } from '../theme';
 
@@ -38,6 +40,7 @@ export type StudentStackParams = {
     Spend: undefined;
     Books: undefined;
     BookRegister: undefined;
+    BookShelf: undefined;
     Profile: undefined;
 };
 
@@ -49,6 +52,7 @@ export type ManagerStackParams = {
     Catalog: undefined;
     RewardUse: undefined;
     BookReview: undefined;
+    WeeklyReport: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
@@ -65,6 +69,7 @@ function StudentNavigator() {
             <StudentStack.Screen name="Spend" component={SpendScreen} />
             <StudentStack.Screen name="Books" component={BooksScreen} />
             <StudentStack.Screen name="BookRegister" component={BookRegisterScreen} />
+            <StudentStack.Screen name="BookShelf" component={BookShelfScreen} />
             <StudentStack.Screen name="Profile" component={ProfileScreen} />
         </StudentStack.Navigator>
     );
@@ -80,6 +85,7 @@ function ManagerNavigator() {
             <ManagerStack.Screen name="DeadlineSettings" component={DeadlineSettingsScreen} />
             <ManagerStack.Screen name="RewardUse" component={RewardUseScreen} />
             <ManagerStack.Screen name="BookReview" component={BookReviewScreen} />
+            <ManagerStack.Screen name="WeeklyReport" component={WeeklyReportScreen} />
         </ManagerStack.Navigator>
     );
 }

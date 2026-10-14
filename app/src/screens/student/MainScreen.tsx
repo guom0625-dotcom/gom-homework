@@ -33,6 +33,9 @@ const WOBBLE = 8;                         // 섬마다 조금씩 어긋나는 �
 const ROW_STEP = (COLS - 1) * SLOPE + 112;
 const PATH_Y = 62;                        // 타일 상단 → 섬 중심까지
 
+// 연속 달성 보너스 (서버와 같은 표): N일 연속이 되는 날 다이아 지급
+const STREAK_BONUS: [number, number][] = [[7, 1], [14, 2], [28, 4], [56, 8], [112, 16], [224, 32], [448, 64]];
+
 const ACTION_LABEL: Record<DayStatus, string> = {
   todo:     '오늘의 할일 등록',
   pending:  '할일 목록 보기',
@@ -64,6 +67,7 @@ export function MainScreen() {
     registerDeadlineMin, registerDeadlineEnabled, completeDeadlineMin, rubies,
   } = useAppStore();
   // dayStatus 가 todo 가 아니면 오늘 등록한 할일이 있다는 뜻 → 등록 마감이 지나도 추가 가능
+  const nextBonus = STREAK_BONUS.find(([days]) => days > streak);
   const registerOpen = canRegisterOn(
     today, today, dayStatus !== 'todo', registerDeadlineEnabled ? registerDeadlineMin : null, completeDeadlineMin,
   );
@@ -185,6 +189,7 @@ export function MainScreen() {
             <Text style={styles.daySub}>
               {m}월의 섬 {days.length}개 · 정복한 섬 {doneDays.size}개{'\n'}
               {registerDeadlineEnabled ? `등록 마감 ${formatDeadline(registerDeadlineMin)} · ` : ''}완료 마감 {formatDeadline(completeDeadlineMin)}
+              {nextBonus ? `\n🔥 ${nextBonus[0]}일 연속까지 ${nextBonus[0] - streak}일 · 보너스 💎${nextBonus[1]}` : ''}
             </Text>
           </View>
         )}

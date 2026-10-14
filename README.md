@@ -237,13 +237,15 @@ Base URL: `http://<서버-IP>:3100`
 | `DELETE` | `/students/:id` | 학생 삭제 (연결 해제 + 계정과 모든 기록 삭제, 되돌릴 수 없음) |
 | `GET` | `/students/:id/progress?month=YYYYMM` | 특정 학생의 월별 날짜 현황 |
 | `GET` | `/tasks?student_id=xxx&from=YYYYMMDD` | 특정 학생의 `from` 이후 할일 + 검토 대기 중인 할일 → `{ tasks, older_day }` |
-| `POST` | `/tasks/:id/approve` | 할일 완료 승인 |
+| `POST` | `/tasks/:id/approve` | 할일 완료 승인 (`praise` 칭찬 한마디, 선택) |
 | `POST` | `/tasks/:id/reject` | 할일 완료 반려 |
 | `POST` | `/tasks/:id/approve-plan` · `reject-plan` | 계획 승인 / 반려 |
 | `POST` | `/tasks/:id/approve-delete` · `reject-delete` | 삭제 요청 승인(실제 삭제) / 반려 |
 | `GET/PUT` | `/rules` | 자동 보상 규칙 조회/설정 |
 | `GET` | `/books?status=done_requested` | 연결된 학생들의 책 (상태별 / `done_since`) |
 | `POST` | `/books/:id/approve` · `reject` | 책읽기 완료 승인(루비 1개 지급) / 반려 |
+| `GET` | `/report/weekly?week_start=YYYYMMDD` | 주간 리포트 (기본 이번 주) |
+| `GET` | `/books/shelf?student_id=xxx` | 학생의 책장 |
 | `GET/PUT` | `/settings` | 마감시간 조회/설정 (`register_deadline_min`, `complete_deadline_min`) |
 | `POST` | `/catalog` | 보상 아이템 등록 (`cost` 다이아, `cost_ruby` 루비, `kind`: `once` 1회성 / `always` 상시) |
 | `PATCH` | `/catalog/:id` | 보상 아이템 수정 |
@@ -265,6 +267,15 @@ Base URL: `http://<서버-IP>:3100`
 - 보석은 두 종류: **다이아**(하루 할일 전부 승인) · **루비**(책 한 권 완료).
 - 보상 가격은 다이아(`cost`)와 루비(`cost_ruby`)를 섞거나 하나만 쓸 수 있다 (합쳐서 1 이상).
   예: 다이아 3 + 루비 2 / 다이아 1 / 루비 4.
+
+### 연속 달성 · 칭찬 · 책장 · 주간 리포트
+
+- **연속 달성 보너스**: 할일을 전부 승인받은 날이 7·14·28·56·112·224·448일 연속이 되는 날,
+  그날 다이아에 더해 보너스 1·2·4·8·16·32·64개 (그 이후는 없음). 정산 시점에 그날까지의 연속 일수로 판단하며,
+  늦은 승인으로 지난 빈칸이 메워져도 소급 지급하지 않는다.
+- **칭찬 한마디**: 매니저가 할일·책 완료를 승인할 때 고르거나 직접 쓴 한마디가 학생 화면과 알림에 표시된다.
+- **책장**: 다 읽은 책 표지를 책장 모양으로 모아 보여준다 (이번 달 / 올해 / 전체 권수).
+- **주간 리포트**: 매니저 메뉴에서 주별로 보고, 매주 일요일 20:00(KST)에 이번 주 요약이 알림으로 온다.
 
 ### 보상 (다이아)
 

@@ -10,6 +10,7 @@ import type { RouteProp } from '@react-navigation/native';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { useAppStore, type Task } from '../../store/appStore';
 import { addDays, formatDay, todayKST } from '../../lib/days';
+import { PraiseModal } from '../../components/PraiseModal';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = {
@@ -100,10 +101,13 @@ export function ApprovalScreen({ navigation, route }: Props) {
         setRefreshing(false);
     };
 
-    const handleApproveCompletion = async (id: string) => {
+    // 완료 승인은 칭찬 한마디 창을 거친다
+    const [praiseTarget, setPraiseTarget] = useState<Task | null>(null);
+
+    const handleApproveCompletion = async (id: string, praise: string | null) => {
         setLoadingId(id);
         try {
-            await approveTask(id);
+            await approveTask(id, praise);
         } catch (e: unknown) {
             Alert.alert('오류', e instanceof Error ? e.message : '승인 실패');
         } finally {
@@ -237,7 +241,7 @@ export function ApprovalScreen({ navigation, route }: Props) {
                                             isLoading={loadingId === task.id}
                                             onApprovePlan={() => handleApprovePlan(task.id)}
                                             onRejectPlan={() => handleRejectPlan(task.id)}
-                                            onApproveCompletion={() => handleApproveCompletion(task.id)}
+                                            onApproveCompletion={() => setPraiseTarget(task)}
                                             onRejectCompletion={() => handleRejectCompletion(task.id)}
                                             onApproveDelete={() => handleApproveDelete(task.id)}
                                             onRejectDelete={() => handleRejectDelete(task.id)}
@@ -254,6 +258,17 @@ export function ApprovalScreen({ navigation, route }: Props) {
                     </TouchableOpacity>
                 )}
             </ScrollView>
+
+            <PraiseModal
+                visible={praiseTarget != null}
+                title={praiseTarget?.title ?? ''}
+                onCancel={() => setPraiseTarget(null)}
+                onConfirm={praise => {
+                    const target = praiseTarget;
+                    setPraiseTarget(null);
+                    if (target) handleApproveCompletion(target.id, praise);
+                }}
+            />
         </SafeAreaView>
     );
 }

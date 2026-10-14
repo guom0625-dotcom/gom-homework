@@ -11,6 +11,7 @@ export interface Task {
     memo: string | null;
     status: 'todo' | 'plan_submitted' | 'plan_approved' | 'plan_rejected' | 'submitted' | 'approved' | 'rejected' | 'delete_requested';
     prev_status: Task['status'] | null;
+    praise: string | null;   // 매니저가 완료 승인할 때 남긴 칭찬
     submitted_at: number | null;
     reviewed_at: number | null;
     created_at: number;
@@ -60,6 +61,7 @@ export interface Book {
     photo: string;           // 책 사진 (data URL)
     status: 'reading' | 'done_requested' | 'done';
     summary: string | null;  // 완료 요청 때 적은 읽은 내용
+    praise: string | null;   // 매니저가 완료 승인할 때 남긴 칭찬
     created_at: number;
     requested_at: number | null;
     done_at: number | null;
@@ -157,7 +159,7 @@ interface AppState {
     booksSince: number;
     booksOlderDoneAt: number | null; // 더 예전에 완료한 책이 있으면 그 시각
     fetchBooks: (doneSince?: number) => Promise<void>;
-    addBook: (title: string, photo: string) => Promise<void>;
+    addBook: (title: string, photo: string, thumb?: string) => Promise<void>;
     finishBook: (id: string, summary: string) => Promise<void>;
     deleteBook: (id: string) => Promise<void>;
 
@@ -176,7 +178,7 @@ interface AppState {
 
     fetchStudents: () => Promise<void>;
     fetchStudentTasks: (studentId: string, from: number) => Promise<void>;
-    approveTask: (id: string) => Promise<void>;
+    approveTask: (id: string, praise?: string | null) => Promise<void>;
     rejectTask: (id: string) => Promise<void>;
     submitPlan: (id: string) => Promise<void>;
     approvePlan: (id: string) => Promise<void>;
@@ -330,8 +332,8 @@ export const useAppStore = create<AppState>((set, get) => {
         set({ books: res.books, booksSince: since, booksOlderDoneAt: res.older_done_at });
     },
 
-    addBook: async (title, photo) => {
-        const book = await api<Book>('/books', { method: 'POST', body: JSON.stringify({ title, photo }) });
+    addBook: async (title, photo, thumb) => {
+        const book = await api<Book>('/books', { method: 'POST', body: JSON.stringify({ title, photo, thumb }) });
         set(st => ({ books: [book, ...st.books] }));
     },
 
@@ -358,11 +360,14 @@ export const useAppStore = create<AppState>((set, get) => {
     },
 
     // 보상은 할일 단위가 아니라, 하루 할일이 전부 승인된 날에 대해 날짜가 바뀐 뒤 서버가 자동 지급
-    approveTask: async (id) => {
-        await api(`/tasks/${id}/approve`, { method: 'POST' });
+    approveTask: async (id, praise) => {
+        await api(`/tasks/${id}/approve`, {
+            method: 'POST',
+            ...(praise ? { body: JSON.stringify({ praise }) } : {}),
+        });
         set(s => ({
             selectedStudentTasks: s.selectedStudentTasks.map(t =>
-                t.id === id ? { ...t, status: 'approved' as const } : t
+                t.id === id ? { ...t, status: 'approved' as const, praise: praise ?? null } : t
             ),
         }));
     },

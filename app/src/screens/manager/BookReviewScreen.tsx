@@ -10,6 +10,7 @@ import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { api } from '../../api/client';
 import type { Book } from '../../store/appStore';
 import { WEEK_MS } from '../../lib/days';
+import { PraiseModal } from '../../components/PraiseModal';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 
 type Props = { navigation: NativeStackNavigationProp<ManagerStackParams, 'BookReview'> };
@@ -67,12 +68,18 @@ export function BookReviewScreen({ navigation }: Props) {
         setDoneSince(Math.min(doneSince - WEEK_MS, olderDoneAt));
     };
 
-    const review = async (book: Book, action: 'approve' | 'reject') => {
+    const review = async (book: Book, action: 'approve' | 'reject', praise: string | null = null) => {
         setProcessingId(book.id);
         try {
-            await api(`/books/${book.id}/${action}`, { method: 'POST' });
+            await api(`/books/${book.id}/${action}`, {
+                method: 'POST',
+                ...(praise ? { body: JSON.stringify({ praise }) } : {}),
+            });
             setBooks(prev => prev.map(b => b.id === book.id
-                ? { ...b, status: action === 'approve' ? 'done' : 'reading', done_at: action === 'approve' ? Date.now() : null }
+                ? {
+                    ...b, status: action === 'approve' ? 'done' : 'reading', praise,
+                    done_at: action === 'approve' ? Date.now() : null,
+                }
                 : b));
         } catch (e: unknown) {
             Alert.alert('오류', e instanceof Error ? e.message : '오류');
@@ -82,12 +89,9 @@ export function BookReviewScreen({ navigation }: Props) {
         }
     };
 
-    const handleApprove = (book: Book) => {
-        Alert.alert('완료 승인', `"${book.title}" 완료를 승인할까요?\n${book.student_name ?? '학생'}에게 루비 1개가 지급돼요.`, [
-            { text: '취소', style: 'cancel' },
-            { text: '승인', onPress: () => { review(book, 'approve'); } },
-        ]);
-    };
+    // 완료 승인은 칭찬 한마디 창을 거친다
+    const [praiseTarget, setPraiseTarget] = useState<Book | null>(null);
+    const handleApprove = (book: Book) => setPraiseTarget(book);
 
     const handleReject = (book: Book) => {
         Alert.alert('반려', `"${book.title}" 완료 요청을 반려할까요?\n다시 읽는 중으로 돌아가요.`, [
@@ -158,6 +162,7 @@ export function BookReviewScreen({ navigation }: Props) {
                                 </Text>
                             </View>
                         </View>
+                        {item.praise ? <Text style={styles.praise}>💬 {item.praise}</Text> : null}
                         {item.summary && item.status !== 'reading' ? (
                             <View style={styles.summaryBox}>
                                 <Text style={styles.summaryLabel}>읽은 내용</Text>
@@ -182,6 +187,18 @@ export function BookReviewScreen({ navigation }: Props) {
                         )}
                     </View>
                 )}
+            />
+
+            <PraiseModal
+                visible={praiseTarget != null}
+                title={praiseTarget?.title ?? ''}
+                note={`${praiseTarget?.student_name ?? '학생'}에게 루비 1개가 지급돼요`}
+                onCancel={() => setPraiseTarget(null)}
+                onConfirm={praise => {
+                    const target = praiseTarget;
+                    setPraiseTarget(null);
+                    if (target) review(target, 'approve', praise);
+                }}
             />
         </SafeAreaView>
     );
@@ -238,6 +255,7 @@ const styles = StyleSheet.create({
     summaryLabel: { fontFamily: fontFamilies.bodyMed, fontSize: fontSizes.xs, color: colors.ink[500] },
     summary: { fontFamily: fontFamilies.body, fontSize: fontSizes.sm, color: colors.ink[900], lineHeight: 20 },
     actionRow: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
+    praise: { fontFamily: fontFamilies.bodyMed, fontSize: fontSizes.sm, color: colors.ocean[700] },
     rejectBtn: {
         borderRadius: radius.pill,
         paddingHorizontal: 16,

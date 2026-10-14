@@ -100,6 +100,10 @@ export function BooksScreen({ navigation }: Props) {
                 <Text style={styles.infoText}>책을 다 읽고 승인받으면 루비 1개를 받아요</Text>
             </View>
 
+            <TouchableOpacity style={styles.shelfBtn} onPress={() => navigation.navigate('BookShelf')}>
+                <Text style={styles.shelfBtnText}>📚 내 책장 보기</Text>
+            </TouchableOpacity>
+
             <FlatList
                 data={sorted}
                 keyExtractor={b => b.id}
@@ -123,6 +127,7 @@ export function BooksScreen({ navigation }: Props) {
                         <View style={styles.cardBody}>
                             <Text style={styles.bookTitle}>{item.title}</Text>
                             <Text style={styles.status}>{STATUS_LABEL[item.status]}</Text>
+                            {item.praise ? <Text style={styles.praise}>💬 {item.praise}</Text> : null}
                             {item.summary && item.status !== 'reading' ? (
                                 <Text style={styles.summary} numberOfLines={3}>{item.summary}</Text>
                             ) : null}
@@ -216,6 +221,15 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         backgroundColor: '#fff1f4',
     },
+    shelfBtn: {
+        marginHorizontal: 14,
+        marginTop: 12,
+        paddingVertical: 12,
+        alignItems: 'center',
+        borderRadius: radius.md,
+        backgroundColor: '#f3e7d6',
+    },
+    shelfBtnText: { fontFamily: fontFamilies.bodyBold, fontSize: fontSizes.base, color: '#7a5230' },
     infoText: { fontFamily: fontFamilies.bodyMed, fontSize: fontSizes.sm, color: '#c4304f' },
     list: { padding: 14, gap: 10 },
     empty: { paddingTop: 80, alignItems: 'center' },
@@ -244,6 +258,7 @@ const styles = StyleSheet.create({
     cardBody: { flex: 1, gap: 4 },
     bookTitle: { fontFamily: fontFamilies.bodyBold, fontSize: fontSizes.base, color: colors.ink[900] },
     status: { fontFamily: fontFamilies.bodyMed, fontSize: fontSizes.sm, color: colors.ink[500] },
+    praise: { fontFamily: fontFamilies.bodyMed, fontSize: fontSizes.sm, color: colors.ocean[700] },
     summary: { fontFamily: fontFamilies.body, fontSize: fontSizes.sm, color: colors.ink[700], lineHeight: 19 },
     actions: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 6 },
     finishBtn: {
