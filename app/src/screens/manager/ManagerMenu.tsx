@@ -308,5 +308,13 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    badgeText: { fontFamily: fontFamilies.bodyBold, fontSize: fontSizes.xs, color: '#fff' },
+    // 안드로이드 글꼴 위아래 여백을 없애야 숫자가 원 가운데에 온다
+    badgeText: {
+        fontFamily: fontFamilies.bodyBold,
+        fontSize: fontSizes.xs,
+        lineHeight: 14,
+        color: '#fff',
+        includeFontPadding: false,
+        textAlignVertical: 'center',
+    },
 });

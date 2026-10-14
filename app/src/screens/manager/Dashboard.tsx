@@ -237,7 +237,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    menuBadgeText: { fontFamily: fontFamilies.bodyBold, fontSize: 10, color: '#fff' },
+    // 안드로이드 글꼴 위아래 여백을 없애야 숫자가 원 가운데에 온다
+    menuBadgeText: {
+        fontFamily: fontFamilies.bodyBold,
+        fontSize: 10,
+        lineHeight: 12,
+        color: '#fff',
+        includeFontPadding: false,
+        textAlignVertical: 'center',
+    },
     list: { padding: 16, gap: 10 },
     empty: { paddingTop: 60, alignItems: 'center' },
     emptyText: {

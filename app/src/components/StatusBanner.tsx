@@ -27,7 +27,6 @@ export function StatusBanner({ status }: StatusBannerProps) {
     >
       <Text style={styles.icon}>{cfg.icon}</Text>
       <Text style={[styles.text, { color: cfg.color }]}>{cfg.text}</Text>
-      <Text style={[styles.arrow, { color: cfg.color }]}>›</Text>
     </LinearGradient>
   );
 }
@@ -49,8 +48,5 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.body,
     fontSize: fontSizes.base,
     fontWeight: '600',
-  },
-  arrow: {
-    fontSize: fontSizes.lg,
   },
 });
