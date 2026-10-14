@@ -16,6 +16,7 @@ import { registerRewardRoutes } from './routes/rewards.ts';
 import { registerStudentRoutes } from './routes/students.ts';
 import { registerSettingsRoutes } from './routes/settings.ts';
 import { registerBookRoutes } from './routes/books.ts';
+import { registerReportRoutes, sendWeeklyReports } from './routes/report.ts';
 import { DAY_REWARD, settlePastDays } from './lib/gems.ts';
 import { todayKST } from './lib/days.ts';
 import { sendPushToUser } from './lib/push.ts';
@@ -47,13 +48,20 @@ const settle = (full = false) => {
     try {
         const rewarded = settlePastDays(db, full ? 0 : todayKST(now - SETTLE_LOOKBACK_DAYS * 86_400_000));
         if (rewarded.length > 0) app.log.info({ rewarded }, 'day rewards settled');
-        for (const { studentId } of rewarded) {
-            void sendPushToUser(db, studentId, {
-                title: '할일 모두 완료!',
-                body: `다이아 ${DAY_REWARD}개를 받았어요 💎`,
-                data: { type: 'day_rewarded' },
-            });
+        for (const { studentId, streakDays, bonusDiamonds } of rewarded) {
+            void sendPushToUser(db, studentId, bonusDiamonds > 0
+                ? {
+                    title: `🔥 ${streakDays}일 연속 달성!`,
+                    body: `다이아 ${DAY_REWARD}개 + 연속 보너스 ${bonusDiamonds}개를 받았어요 💎`,
+                    data: { type: 'streak_bonus' },
+                }
+                : {
+                    title: '할일 모두 완료!',
+                    body: `다이아 ${DAY_REWARD}개를 받았어요 💎`,
+                    data: { type: 'day_rewarded' },
+                });
         }
+        sendWeeklyReports(db);
     } catch (err) {
         app.log.error(err, 'day settlement failed');
     }
@@ -71,6 +79,7 @@ registerRewardRoutes(app, db, auth);
 registerStudentRoutes(app, db, auth);
 registerSettingsRoutes(app, db, auth);
 registerBookRoutes(app, db, auth);
+registerReportRoutes(app, db, auth);
 
 // app: 앱이 집 WiFi에서 내부 주소가 진짜 이 서버인지 확인하는 데 쓴다
 app.get('/health', async () => ({ ok: true, app: 'gom-homework', time: Date.now() }));

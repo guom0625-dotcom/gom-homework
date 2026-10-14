@@ -18,3 +18,14 @@ export function isValidDay(day: number): boolean {
 export function prevDay(day: number): number {
     return todayKST(toUTC(day) - KST_OFFSET_MS - DAY_MS);
 }
+
+/** 날짜에 n일 더하기 (음수 가능) */
+export function addDays(day: number, n: number): number {
+    return todayKST(toUTC(day) - KST_OFFSET_MS + n * DAY_MS);
+}
+
+/** 그 날짜가 속한 주의 월요일 */
+export function weekStartOf(day: number): number {
+    const dow = new Date(toUTC(day)).getUTCDay();  // 0 = 일요일
+    return addDays(day, -((dow + 6) % 7));
+}

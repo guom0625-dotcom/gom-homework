@@ -12,7 +12,13 @@ const CreateBody = z.object({
     title: z.string().min(1).max(100),
     // 책 사진은 필수. 앱에서 줄여서 보내는 JPEG data URL (~수십 KB) — 넉넉히 600KB 까지
     photo: z.string().startsWith('data:image/').max(600_000),
+    // 책장용 작은 표지 (선택 — 예전 앱은 보내지 않는다)
+    thumb: z.string().startsWith('data:image/').max(100_000).optional(),
 });
+
+const ApproveBody = z.object({
+    praise: z.string().max(100).optional(),
+}).optional();
 
 const FinishBody = z.object({
     summary: z.string().min(1).max(1000),
@@ -83,6 +89,22 @@ export function registerBookRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         return db.prepare(`${sql} ORDER BY b.created_at DESC`).all(...params);
     });
 
+    // GET /books/shelf?student_id=xxx  (책장 — 다 읽은 책 전부, 작은 표지로)
+    app.get('/books/shelf', { preHandler: auth }, async (req, reply) => {
+        const { student_id } = req.query as { student_id?: string };
+        let targetId = req.user.id;
+        if (req.user.role === 'manager') {
+            if (!student_id) return reply.code(400).send({ error: 'student_id required' });
+            if (!isLinked(req.user.id, student_id)) return reply.code(403).send({ error: 'forbidden' });
+            targetId = student_id;
+        }
+        return db.prepare(`
+            SELECT id, title, COALESCE(thumb, photo) AS cover, summary, praise, done_at
+            FROM books WHERE student_id = ? AND status = 'done'
+            ORDER BY done_at DESC
+        `).all(targetId);
+    });
+
     // POST /books  (student only — 언제든 등록, 제목과 사진 필수, 매니저 승인 없음)
     app.post('/books', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
@@ -91,9 +113,9 @@ export function registerBookRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
 
         const id = ulid();
         db.prepare(`
-            INSERT INTO books (id, student_id, title, photo, status, created_at)
-            VALUES (?, ?, ?, ?, 'reading', ?)
-        `).run(id, req.user.id, body.data.title, body.data.photo, Date.now());
+            INSERT INTO books (id, student_id, title, photo, thumb, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'reading', ?)
+        `).run(id, req.user.id, body.data.title, body.data.photo, body.data.thumb ?? null, Date.now());
 
         return reply.code(201).send(db.prepare('SELECT * FROM books WHERE id = ?').get(id));
     });
@@ -139,6 +161,9 @@ export function registerBookRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
     app.post('/books/:id/approve', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'manager') return reply.code(403).send({ error: 'forbidden' });
         const { id } = req.params as { id: string };
+        const body = ApproveBody.safeParse(req.body);
+        if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
+        const praise = body.data?.praise?.trim() || null;
 
         const book = reviewableBook(id, req.user.id);
         if (book === 'not_found') return reply.code(404).send({ error: 'not_found' });
@@ -147,7 +172,7 @@ export function registerBookRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
 
         const now = Date.now();
         db.transaction(() => {
-            db.prepare("UPDATE books SET status = 'done', done_at = ? WHERE id = ?").run(now, id);
+            db.prepare("UPDATE books SET status = 'done', done_at = ?, praise = ? WHERE id = ?").run(now, praise, id);
             db.prepare('UPDATE gems_balance SET ruby = ruby + ?, updated_at = ? WHERE student_id = ?')
                 .run(BOOK_REWARD_RUBY, now, book.student_id);
             db.prepare(`
@@ -158,7 +183,7 @@ export function registerBookRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
 
         await sendPushToUser(db, book.student_id, {
             title: '책읽기 완료 승인!',
-            body: `"${book.title}" — 루비 ${BOOK_REWARD_RUBY}개를 받았어요`,
+            body: `${praise ? `💬 ${praise} — ` : `"${book.title}" — `}루비 ${BOOK_REWARD_RUBY}개를 받았어요`,
             data: { type: 'book_approved', book_id: id },
         });
 

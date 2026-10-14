@@ -19,6 +19,11 @@ const EditBody = z.object({
     memo: z.string().max(500).nullable().optional(),
 });
 
+// 매니저가 완료 승인할 때 남기는 칭찬 한마디 (선택)
+const ApproveBody = z.object({
+    praise: z.string().max(100).optional(),
+}).optional();
+
 const RejectBody = z.object({
     reason: z.string().max(200).optional(),
 });
@@ -255,6 +260,9 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
     app.post('/tasks/:id/approve', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'manager') return reply.code(403).send({ error: 'forbidden' });
         const { id } = req.params as { id: string };
+        const body = ApproveBody.safeParse(req.body);
+        if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
+        const praise = body.data?.praise?.trim() || null;
 
         const task = reviewableTask(id, req.user.id);
         if (task === 'not_found') return reply.code(404).send({ error: 'not_found' });
@@ -262,17 +270,20 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         if (task.status !== 'submitted') return reply.code(409).send({ error: 'not_submitted' });
 
         db.prepare(
-            "UPDATE tasks SET status = 'approved', reviewed_at = ? WHERE id = ?"
-        ).run(Date.now(), id);
-        const dayRewarded = settleDay(db, task.student_id, task.day);
+            "UPDATE tasks SET status = 'approved', reviewed_at = ?, praise = ? WHERE id = ?"
+        ).run(Date.now(), praise, id);
+        const settled = settleDay(db, task.student_id, task.day);
 
         await pushTo(task.student_id, {
             title: '할일 승인!',
-            body: dayRewarded ? `"${task.title}" 완료 — 다이아 ${DAY_REWARD}개를 받았어요` : `"${task.title}" 완료`,
+            body: [
+                praise ? `💬 ${praise}` : `"${task.title}" 완료`,
+                settled ? `다이아 ${DAY_REWARD + settled.bonusDiamonds}개를 받았어요` : '',
+            ].filter(Boolean).join(' — '),
             data: { type: 'task_approved', task_id: id },
         });
 
-        return { ok: true, day_rewarded: dayRewarded };
+        return { ok: true, day_rewarded: settled != null };
     });
 
     // POST /tasks/:id/reject  (manager only)
@@ -351,7 +362,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
 
         db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
         // 지난 날의 마지막 미결 할일이 사라져 남은 게 전부 승인 상태가 됐으면 정산
-        const dayRewarded = settleDay(db, task.student_id, task.day);
+        const settled = settleDay(db, task.student_id, task.day);
 
         await pushTo(task.student_id, {
             title: '할일 삭제 승인',
@@ -359,7 +370,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             data: { type: 'delete_approved', task_id: id },
         });
 
-        return { ok: true, day_rewarded: dayRewarded };
+        return { ok: true, day_rewarded: settled != null };
     });
 
     // POST /tasks/:id/reject-delete  (manager only — 삭제 요청 전 상태로 복구)
