@@ -187,7 +187,8 @@ export function CatalogScreen({ navigation }: Props) {
                     </View>
                 }
                 renderItem={({ item }) => (
-                    <View style={styles.card}>
+                    // 카드를 누르면 수정, 삭제만 따로 버튼
+                    <TouchableOpacity style={styles.card} activeOpacity={0.7} onPress={() => openEdit(item)}>
                         <View style={styles.cardBody}>
                             <Text style={styles.itemTitle}>{item.title}</Text>
                             {item.description ? (
@@ -196,14 +197,12 @@ export function CatalogScreen({ navigation }: Props) {
                             <CostRow item={item} />
                         </View>
                         <View style={styles.cardActions}>
-                            <TouchableOpacity onPress={() => openEdit(item)} style={styles.editBtn}>
-                                <Text style={styles.editBtnText}>수정</Text>
-                            </TouchableOpacity>
                             <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteBtn}>
                                 <Text style={styles.deleteBtnText}>삭제</Text>
                             </TouchableOpacity>
+                            <Text style={styles.chevron}>›</Text>
                         </View>
-                    </View>
+                    </TouchableOpacity>
                 )}
             />
 
@@ -375,19 +374,8 @@ const styles = StyleSheet.create({
         color: colors.ocean[500],
         marginTop: 2,
     },
-    cardActions: { gap: 6 },
-    editBtn: {
-        backgroundColor: colors.sky[100],
-        borderRadius: radius.pill,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        alignItems: 'center',
-    },
-    editBtnText: {
-        fontFamily: fontFamilies.bodyMed,
-        fontSize: fontSizes.xs,
-        color: colors.sky[700],
-    },
+    cardActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    chevron: { fontSize: 22, color: colors.ink[300], paddingHorizontal: 2 },
     deleteBtn: {
         backgroundColor: colors.paper2,
         borderRadius: radius.pill,

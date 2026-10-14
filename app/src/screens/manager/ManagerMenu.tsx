@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
     View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Switch,
+    Modal, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -25,6 +26,7 @@ export function ManagerMenuScreen({ navigation }: Props) {
     const [loginCodeFor, setLoginCodeFor] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [pushOn, setPushOn] = useState(true);
+    const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
 
     useFocusEffect(useCallback(() => {
         api<OwnedReward[]>('/rewards?status=use_requested')
@@ -75,6 +77,19 @@ export function ManagerMenuScreen({ navigation }: Props) {
             Alert.alert('오류', '코드 생성에 실패했어요');
         } finally {
             setCodeLoading(false);
+        }
+    };
+
+    const handleRename = async () => {
+        if (!renaming) return;
+        const name = renaming.name.trim();
+        if (!name) { Alert.alert('이름을 입력해주세요'); return; }
+        try {
+            await api(`/students/${renaming.id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+            await fetchStudents();
+            setRenaming(null);
+        } catch {
+            Alert.alert('오류', '이름 변경에 실패했어요');
         }
     };
 
@@ -183,6 +198,12 @@ export function ManagerMenuScreen({ navigation }: Props) {
                     <View key={st.id} style={styles.studentSection}>
                         <Text style={styles.sectionTitle}>{st.name} · {formatDay(st.joined_day)} 가입</Text>
                         <MenuItem
+                            icon="✏️"
+                            label="이름 바꾸기"
+                            desc={`지금 이름: ${st.name}`}
+                            onPress={() => setRenaming({ id: st.id, name: st.name })}
+                        />
+                        <MenuItem
                             icon="🔑"
                             label="재로그인 코드"
                             desc="로그아웃했거나 폰을 바꿨을 때 원래 계정으로 다시 들어가기"
@@ -205,6 +226,30 @@ export function ManagerMenuScreen({ navigation }: Props) {
 
                 <Text style={styles.versionText}>v{Constants.expoConfig?.version ?? '—'}</Text>
             </ScrollView>
+
+            <Modal visible={renaming != null} transparent animationType="fade" onRequestClose={() => setRenaming(null)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>이름 바꾸기</Text>
+                        <TextInput
+                            style={styles.modalInput}
+                            value={renaming?.name ?? ''}
+                            onChangeText={name => setRenaming(r => r && { ...r, name })}
+                            maxLength={20}
+                            autoFocus
+                            onSubmitEditing={handleRename}
+                        />
+                        <View style={styles.modalBtns}>
+                            <TouchableOpacity style={styles.modalCancel} onPress={() => setRenaming(null)}>
+                                <Text style={styles.modalCancelText}>취소</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.modalSave} onPress={handleRename}>
+                                <Text style={styles.modalSaveText}>저장</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -256,6 +301,28 @@ const styles = StyleSheet.create({
     },
     list: { padding: 16, gap: 10 },
     studentSection: { gap: 10, marginTop: 14 },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 },
+    modalCard: { backgroundColor: colors.paper, borderRadius: radius.lg, padding: 20, gap: 14 },
+    modalTitle: { fontFamily: fontFamilies.display, fontSize: fontSizes.xl, color: colors.ink[900], textAlign: 'center' },
+    modalInput: {
+        backgroundColor: colors.card,
+        borderRadius: radius.md,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        fontFamily: fontFamilies.bodyBold,
+        fontSize: fontSizes.base,
+        color: colors.ink[900],
+        borderWidth: 1,
+        borderColor: colors.ink[200],
+    },
+    modalBtns: { flexDirection: 'row', gap: 10 },
+    modalCancel: {
+        flex: 1, paddingVertical: 12, alignItems: 'center',
+        borderRadius: radius.md, borderWidth: 1, borderColor: colors.ink[200],
+    },
+    modalCancelText: { fontFamily: fontFamilies.bodyMed, fontSize: fontSizes.base, color: colors.ink[500] },
+    modalSave: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.ocean[500] },
+    modalSaveText: { fontFamily: fontFamilies.bodyBold, fontSize: fontSizes.base, color: '#fff' },
     sectionTitle: {
         fontFamily: fontFamilies.bodyBold,
         fontSize: fontSizes.sm,
