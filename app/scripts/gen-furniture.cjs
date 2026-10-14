@@ -94,7 +94,6 @@ const ITEMS = [
     ['plantSmall1', '작은 화분 1', 'deco', 1, 0, 'small'],
     ['plantSmall2', '작은 화분 2', 'deco', 1, 0, 'small'],
     ['plantSmall3', '작은 화분 3', 'deco', 1, 0, 'small'],
-    ['bear', '곰인형', 'deco', 0, 1, 'small'],
     ['books', '책 더미', 'deco', 0, 1, 'small'],
     ['pillow', '쿠션', 'deco', 1, 0, 'small'],
     ['pillowLong', '긴 쿠션', 'deco', 1, 0, 'small'],

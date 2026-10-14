@@ -13,7 +13,7 @@ import { Price } from '../../components/Price';
 import { MiniRoom, FurnitureThumb } from '../../components/MiniRoom';
 import { FURNITURE_CELL as CELL } from '../../lib/furnitureData';
 import {
-    makeLayout, defOf, canPlace, clampToRoom, findSpot, surfaceUnder, inRoom, pointIn,
+    makeLayout, defOf, canPlace, clampToRoom, findSpot, surfaceUnder, inRoom, hitTest,
     WALL_COLORS, FLOOR_COLORS,
     type Room, type RoomItem, type Drawn,
 } from '../../lib/miniroom';
@@ -101,10 +101,7 @@ export function MiniRoomScreen({ navigation }: Props) {
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (e) => {
             const { locationX: px, locationY: py } = e.nativeEvent;
-            const drawn = drawnRef.current;
-            // 이미 고른 가구를 먼저, 그다음 앞에 그려진 것부터
-            const sel = drawn.find(d => d.item.id === live.current.selectedId && pointIn(d.hit, px, py));
-            const hit = sel ?? [...drawn].reverse().find(d => pointIn(d.hit, px, py));
+            const hit = hitTest(drawnRef.current, px, py, live.current.selectedId);
             if (hit) {
                 setSelectedId(hit.item.id);
                 dragRef.current = { id: hit.item.id, startX: hit.item.x, startZ: hit.item.z, moved: false };

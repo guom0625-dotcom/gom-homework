@@ -4,7 +4,7 @@
 // (x = 0 쪽이 왼쪽 벽, z = 0 쪽이 오른쪽 벽). 카메라는 45° 돌려 45° 내려다보는 Kenney 렌더와 같다.
 import { FURNITURE_BY_KEY, FURNITURE_CELL as CELL, type FurnitureDef } from './furnitureData';
 
-export const ROOM_SIZE = 12;
+export const ROOM_SIZE = 20;
 export const WALL_H = 1.0;          // 벽 높이 (모델 단위)
 const C = Math.SQRT1_2;
 const SPAN = ROOM_SIZE * CELL;      // 방 한 변 (모델 단위)
@@ -158,6 +158,34 @@ export function drawnOf(l: Layout, items: RoomItem[], item: RoomItem): Drawn | n
         hit,
         depth: item.x + w / 2 + item.z + d / 2,
     };
+}
+
+// 손가락 위치에 있는 가구 — 이미 고른 것 먼저, 그다음 앞에 그려진 것부터.
+// 작은 소품은 정확히 누르기 어려우니 아무것도 안 걸리면 가까이(slop 픽셀 안) 있는 것을 고른다
+export function hitTest(drawn: Drawn[], px: number, py: number, selectedId: string | null, slop = 14): Drawn | null {
+    const sel = drawn.find(d => d.item.id === selectedId && pointIn(d.hit, px, py));
+    if (sel) return sel;
+    const direct = [...drawn].reverse().find(d => pointIn(d.hit, px, py) && d.def.type !== 'rug');
+    if (direct) return direct;
+    let best: Drawn | null = null, bestDist = slop;
+    for (const d of drawn) {
+        if (d.def.type === 'rug') continue;
+        const dist = distToPoly(d.hit, px, py);
+        if (dist < bestDist) { best = d; bestDist = dist; }
+    }
+    // 그 외에는 러그 (러그는 맨 아래라 다른 가구를 가리지 않게 마지막에)
+    return best ?? [...drawn].reverse().find(d => pointIn(d.hit, px, py)) ?? null;
+}
+
+function distToPoly(poly: [number, number][], px: number, py: number): number {
+    let best = Infinity;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const [ax, ay] = poly[j], [bx, by] = poly[i];
+        const vx = bx - ax, vy = by - ay;
+        const t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / (vx * vx + vy * vy || 1)));
+        best = Math.min(best, Math.hypot(px - ax - t * vx, py - ay - t * vy));
+    }
+    return best;
 }
 
 export function pointIn(poly: [number, number][], px: number, py: number): boolean {

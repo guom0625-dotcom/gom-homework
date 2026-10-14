@@ -71,7 +71,6 @@ export const FURNITURE_PRICES: Record<string, { cost: number; ruby: number }> = 
     plantSmall1: { cost: 1, ruby: 0 },
     plantSmall2: { cost: 1, ruby: 0 },
     plantSmall3: { cost: 1, ruby: 0 },
-    bear: { cost: 0, ruby: 1 },
     books: { cost: 0, ruby: 1 },
     pillow: { cost: 1, ruby: 0 },
     pillowLong: { cost: 1, ruby: 0 },

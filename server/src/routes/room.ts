@@ -8,7 +8,7 @@ import { FURNITURE_PRICES } from '../lib/furniture.ts';
 
 // 방 바닥은 ROOM_SIZE x ROOM_SIZE 칸. 가구가 몇 칸을 차지하는지는 앱이 알고 겹침 검사도 앱이 한다 —
 // 서버는 칸 번호가 방 안인지만 확인한다.
-export const ROOM_SIZE = 12;
+export const ROOM_SIZE = 20;
 const DEFAULT_STYLE = { wall: 'cream', floor: 'wood' };
 
 const BuyBody = z.object({ item_key: z.string().max(50) });
