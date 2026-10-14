@@ -14,7 +14,9 @@ import { registerRulesRoutes } from './routes/rules.ts';
 import { registerCatalogRoutes } from './routes/catalog.ts';
 import { registerRewardRoutes } from './routes/rewards.ts';
 import { registerStudentRoutes } from './routes/students.ts';
-import { DAY_REWARD, settlePastDays, settlementCutoffDay } from './lib/gems.ts';
+import { registerSettingsRoutes } from './routes/settings.ts';
+import { DAY_REWARD, settlePastDays } from './lib/gems.ts';
+import { todayKST } from './lib/days.ts';
 import { sendPush } from './lib/push.ts';
 
 export type AuthHandler = ReturnType<typeof makeAuth>;
@@ -31,16 +33,18 @@ app.decorateRequest('user', null as unknown as import('./auth.ts').AuthUser);
 
 const auth = makeAuth(db);
 
-// 하루 보상 정산: 전날 할일이 전부 승인된 학생에게 다이아 지급 (매일 오전 6시 KST).
-// 서버가 폰에서 돌아 기기가 절전에 들어가면 타이머가 멈추므로 "자정에 한 번 울리는 타이머"는 믿을 수 없다.
-// 대신 지급 시각이 지났는지를 짧은 주기와 모든 요청에서 벽시계 기준으로 확인해, 지났으면 그때 정산한다.
-let settledDay = 0;
-const settleIfDayChanged = () => {
-    const today = settlementCutoffDay();
-    if (today === settledDay) return;
+// 하루 보상 정산: 완료 마감시간(매니저 설정)이 지난 날 중 할일이 전부 승인된 날에 다이아 지급.
+// 서버가 폰에서 돌아 기기가 절전에 들어가면 타이머가 멈추므로 "정해진 시각에 한 번 울리는 타이머"는 믿을 수 없다.
+// 대신 1분마다, 그리고 요청이 들어올 때(최대 1분에 한 번) 벽시계 기준으로 마감이 지났는지 확인한다.
+const SETTLE_INTERVAL_MS = 60_000;
+const SETTLE_LOOKBACK_DAYS = 3;  // 주기 확인은 최근 며칠만. 그보다 오래 밀린 건 서버 시작 때 전체 훑기로 처리
+let lastSettleAt = 0;
+const settle = (full = false) => {
+    const now = Date.now();
+    if (!full && now - lastSettleAt < SETTLE_INTERVAL_MS) return;
+    lastSettleAt = now;
     try {
-        const rewarded = settlePastDays(db);
-        settledDay = today;
+        const rewarded = settlePastDays(db, full ? 0 : todayKST(now - SETTLE_LOOKBACK_DAYS * 86_400_000));
         if (rewarded.length > 0) app.log.info({ rewarded }, 'day rewards settled');
         for (const { studentId } of rewarded) {
             const student = db.prepare('SELECT push_token FROM users WHERE id = ?').get(studentId) as
@@ -55,9 +59,9 @@ const settleIfDayChanged = () => {
         app.log.error(err, 'day settlement failed');
     }
 };
-settleIfDayChanged();
-const settleTimer = setInterval(settleIfDayChanged, 60_000);
-app.addHook('onRequest', async () => { settleIfDayChanged(); });
+settle(true);
+const settleTimer = setInterval(() => settle(), SETTLE_INTERVAL_MS);
+app.addHook('onRequest', async () => { settle(); });
 
 registerAuthRoutes(app, db, auth);
 registerMeRoutes(app, db, auth);
@@ -66,6 +70,7 @@ registerRulesRoutes(app, db, auth);
 registerCatalogRoutes(app, db, auth);
 registerRewardRoutes(app, db, auth);
 registerStudentRoutes(app, db, auth);
+registerSettingsRoutes(app, db, auth);
 
 // app: 앱이 집 WiFi에서 내부 주소가 진짜 이 서버인지 확인하는 데 쓴다
 app.get('/health', async () => ({ ok: true, app: 'gom-homework', time: Date.now() }));

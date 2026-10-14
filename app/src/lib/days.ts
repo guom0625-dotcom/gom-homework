@@ -35,3 +35,18 @@ export function addDays(day: number, n: number): number {
     const { y, m, d } = dayParts(day);
     return fromUTC(Date.UTC(y, m - 1, d) + n * DAY_MS);
 }
+
+/** 그 날짜 0시(KST)의 시각(ms) */
+export function dayStartMs(day: number): number {
+    const { y, m, d } = dayParts(day);
+    return Date.UTC(y, m - 1, d) - KST_OFFSET_MS;
+}
+
+/** 마감시간(그 날 0시로부터 몇 분) → "21:00" / "24:00" / "다음날 06:00" */
+export function formatDeadline(min: number): string {
+    const nextDay = min > 1440;
+    const t = nextDay ? min - 1440 : min;
+    const hh = String(Math.floor(t / 60)).padStart(2, '0');
+    const mm = String(t % 60).padStart(2, '0');
+    return `${nextDay ? '다음날 ' : ''}${hh}:${mm}`;
+}

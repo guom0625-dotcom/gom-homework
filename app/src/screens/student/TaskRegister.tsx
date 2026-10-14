@@ -9,6 +9,7 @@ import type { RouteProp } from '@react-navigation/native';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
 import { useAppStore } from '../../store/appStore';
 import { formatDay } from '../../lib/days';
+import { errorMessage } from '../../lib/errors';
 import { colors, fontFamilies, fontSizes, radius } from '../../theme';
 
 type Props = {
@@ -32,7 +33,7 @@ export function TaskRegisterScreen({ navigation, route }: Props) {
             else await createTask(day, title.trim(), memo.trim() || undefined);
             navigation.goBack();
         } catch (e: unknown) {
-            Alert.alert('오류', e instanceof Error ? e.message : '저장 실패');
+            Alert.alert('오류', errorMessage(e, '저장 실패'));
         } finally {
             setLoading(false);
         }

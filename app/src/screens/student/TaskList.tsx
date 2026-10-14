@@ -8,8 +8,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
-import { useAppStore } from '../../store/appStore';
-import { formatDay } from '../../lib/days';
+import { useAppStore, canRegisterOn, isDayOpen } from '../../store/appStore';
+import { errorMessage } from '../../lib/errors';
+import { formatDay, formatDeadline } from '../../lib/days';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
 import type { Task } from '../../store/appStore';
 
@@ -41,9 +42,13 @@ const STATUS_COLOR: Record<Task['status'], string> = {
 
 export function TaskListScreen({ navigation, route }: Props) {
     const { day } = route.params;
-    const { today, tasks, fetchTasks, submitTask, submitPlan, requestDeleteTask, cancelDeleteTask } = useAppStore();
-    // 지난 날짜는 보기 전용 — 등록/상신/삭제 요청은 오늘 할일만 가능
-    const isToday = day === today;
+    const {
+        today, tasks, registerDeadlineMin, completeDeadlineMin,
+        fetchTasks, submitTask, submitPlan, requestDeleteTask, cancelDeleteTask,
+    } = useAppStore();
+    // 새 할일 등록은 오늘의 등록 마감 전까지, 상신·수정·삭제 요청은 그 날의 완료 마감 전까지. 그 뒤로는 보기 전용
+    const canAdd = canRegisterOn(day, today, registerDeadlineMin);
+    const isOpen = isDayOpen(day, completeDeadlineMin);
     const [refreshing, setRefreshing] = useState(false);
     const [loadingId, setLoadingId] = useState<string | null>(null);
 
@@ -64,7 +69,7 @@ export function TaskListScreen({ navigation, route }: Props) {
         try {
             await submitPlan(id);
         } catch (e: unknown) {
-            Alert.alert('오류', e instanceof Error ? e.message : '상신 실패');
+            Alert.alert('오류', errorMessage(e, '상신 실패'));
         } finally {
             setLoadingId(null);
         }
@@ -75,7 +80,7 @@ export function TaskListScreen({ navigation, route }: Props) {
         try {
             await submitTask(id);
         } catch (e: unknown) {
-            Alert.alert('오류', e instanceof Error ? e.message : '제출 실패');
+            Alert.alert('오류', errorMessage(e, '제출 실패'));
         } finally {
             setLoadingId(null);
         }
@@ -87,7 +92,7 @@ export function TaskListScreen({ navigation, route }: Props) {
             {
                 text: '삭제 요청', style: 'destructive',
                 onPress: () => requestDeleteTask(id).catch((e: unknown) =>
-                    Alert.alert('오류', e instanceof Error ? e.message : '삭제 요청 실패')
+                    Alert.alert('오류', errorMessage(e, '삭제 요청 실패'))
                 ),
             },
         ]);
@@ -106,7 +111,7 @@ export function TaskListScreen({ navigation, route }: Props) {
                     <Text style={styles.backText}>‹</Text>
                 </TouchableOpacity>
                 <Text style={styles.title}>{formatDay(day)} 할일</Text>
-                {isToday ? (
+                {canAdd ? (
                     <TouchableOpacity
                         style={styles.addBtn}
                         onPress={() => navigation.navigate('TaskRegister', { day })}
@@ -116,6 +121,13 @@ export function TaskListScreen({ navigation, route }: Props) {
                 ) : <View style={{ width: 36 }} />}
             </View>
 
+            {isOpen && (
+                <Text style={styles.deadlineInfo}>
+                    {day === today ? `등록 마감 ${formatDeadline(registerDeadlineMin)} · ` : ''}
+                    완료 마감 {formatDeadline(completeDeadlineMin)}
+                </Text>
+            )}
+
             <FlatList
                 data={tasks}
                 keyExtractor={t => t.id}
@@ -124,7 +136,9 @@ export function TaskListScreen({ navigation, route }: Props) {
                 ListEmptyComponent={
                     <View style={styles.empty}>
                         <Text style={styles.emptyText}>
-                            {isToday ? '할일이 없어요\n+ 추가를 눌러 등록해보세요' : '이 날은 등록한 할일이 없어요'}
+                            {canAdd ? '할일이 없어요\n+ 추가를 눌러 등록해보세요'
+                                : day === today ? '오늘 할일 등록 시간이 지났어요'
+                                : '이 날은 등록한 할일이 없어요'}
                         </Text>
                     </View>
                 }
@@ -138,7 +152,7 @@ export function TaskListScreen({ navigation, route }: Props) {
                             <Text style={[styles.statusBadge, { color: STATUS_COLOR[item.status] }]}>
                                 {STATUS_LABEL[item.status]}
                             </Text>
-                            {isToday && (item.status === 'todo' || item.status === 'plan_rejected') && (
+                            {isOpen && (item.status === 'todo' || item.status === 'plan_rejected') && (
                                 <View style={styles.actionBtns}>
                                     {loadingId === item.id
                                         ? <ActivityIndicator size="small" color={colors.ocean[500]} />
@@ -164,7 +178,7 @@ export function TaskListScreen({ navigation, route }: Props) {
                                     }
                                 </View>
                             )}
-                            {isToday && (item.status === 'plan_approved' || item.status === 'rejected') && (
+                            {isOpen && (item.status === 'plan_approved' || item.status === 'rejected') && (
                                 <View style={styles.actionBtns}>
                                     {loadingId === item.id
                                         ? <ActivityIndicator size="small" color={colors.ocean[500]} />
@@ -181,12 +195,12 @@ export function TaskListScreen({ navigation, route }: Props) {
                                     }
                                 </View>
                             )}
-                            {isToday && item.status === 'delete_requested' && (
+                            {isOpen && item.status === 'delete_requested' && (
                                 <TouchableOpacity onPress={() => handleCancelDelete(item.id)}>
                                     <Text style={styles.cancelDeleteText}>요청 취소</Text>
                                 </TouchableOpacity>
                             )}
-                            {isToday && item.status !== 'approved' && item.status !== 'delete_requested' && (
+                            {isOpen && item.status !== 'approved' && item.status !== 'delete_requested' && (
                                 <TouchableOpacity onPress={() => handleDelete(item.id)}>
                                     <Text style={styles.deleteBtn}>🗑</Text>
                                 </TouchableOpacity>
@@ -263,6 +277,14 @@ const styles = StyleSheet.create({
     statusBadge: {
         fontFamily: fontFamilies.bodyMed,
         fontSize: fontSizes.xs,
+    },
+    deadlineInfo: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.sm,
+        color: colors.ink[500],
+        textAlign: 'center',
+        paddingVertical: 8,
+        backgroundColor: colors.paper2,
     },
     actionBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     // 계획 상신 = 파랑, 완료 상신 = 초록 (submitBtn 기본색)

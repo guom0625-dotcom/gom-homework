@@ -128,6 +128,12 @@ export function ManagerMenuScreen({ navigation }: Props) {
                     onPress={() => navigation.navigate('RewardUse')}
                 />
                 <MenuItem
+                    icon="⏰"
+                    label="마감시간 설정"
+                    desc="할일 등록 마감, 완료 마감 · 다이아 지급 시각"
+                    onPress={() => navigation.navigate('DeadlineSettings')}
+                />
+                <MenuItem
                     icon="🔗"
                     label="학생 초대 코드 생성"
                     desc="새 학생을 연결할 6자리 코드 (5분 유효)"

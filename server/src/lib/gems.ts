@@ -1,19 +1,11 @@
 import { ulid } from 'ulid';
 import type { Db } from '../db.ts';
 import { prevDay, todayKST } from './days.ts';
+import { isDayClosed, studentDeadlines } from './deadlines.ts';
 
-// 보석은 다이아 한 종류. 하루 할일이 전부 승인된 날은, 다음 날 REWARD_HOUR_KST시에 DAY_REWARD개 지급.
+// 보석은 다이아 한 종류. 하루 할일이 전부 승인된 날은, 그 날의 완료 마감시간(매니저 설정)에 DAY_REWARD개 지급.
 export const GEM_TYPE = 'diamond';
 export const DAY_REWARD = 1;
-export const REWARD_HOUR_KST = 6;
-
-/**
- * 지금 시점에 정산 대상이 되는 날짜의 상한(이 날짜 미만만 정산).
- * 날짜 자체는 자정에 바뀌지만 지급은 오전 6시부터라서, 0~6시 사이에는 어제가 아직 정산 대상이 아니다.
- */
-export function settlementCutoffDay(now: number = Date.now()): number {
-    return todayKST(now - REWARD_HOUR_KST * 3_600_000);
-}
 
 function isDayDone(db: Db, studentId: string, day: number): boolean {
     const row = db.prepare(`
@@ -24,11 +16,11 @@ function isDayDone(db: Db, studentId: string, day: number): boolean {
 }
 
 /**
- * 지난 날짜의 보상 정산: 할일이 전부 승인됐고 아직 지급 전이면 지급. 지급했으면 true.
- * 정기 정산뿐 아니라 매니저가 지급 시각이 지난 뒤 늦게 승인한 경우에도 호출된다.
+ * 하루 보상 정산: 그 날의 완료 마감시간이 지났고, 할일이 전부 승인됐고, 아직 지급 전이면 지급. 지급했으면 true.
+ * 정기 정산뿐 아니라 매니저가 마감시간이 지난 뒤 늦게 승인한 경우에도 호출된다.
  */
 export function settleDay(db: Db, studentId: string, day: number): boolean {
-    if (day >= settlementCutoffDay()) return false;
+    if (!isDayClosed(studentDeadlines(db, studentId), day)) return false;
     return db.transaction(() => {
         if (!isDayDone(db, studentId, day)) return false;
         const settled = db.prepare(
@@ -48,14 +40,17 @@ export function settleDay(db: Db, studentId: string, day: number): boolean {
     })();
 }
 
-/** 모든 학생의 지난 날짜를 정산하고, 이번에 지급된 (학생, 날짜) 목록을 반환 */
-export function settlePastDays(db: Db): { studentId: string; day: number }[] {
+/**
+ * 할일이 전부 승인된 날 중 마감시간이 지난 것을 정산하고, 이번에 지급된 (학생, 날짜) 목록을 반환.
+ * sinceDay 를 주면 그 날짜 이후만 본다 (주기 확인용 — 전체 훑기는 서버 시작 때 한 번).
+ */
+export function settlePastDays(db: Db, sinceDay = 0): { studentId: string; day: number }[] {
     const candidates = db.prepare(`
         SELECT student_id AS studentId, day FROM tasks
-        WHERE day < ?
+        WHERE day BETWEEN ? AND ?
         GROUP BY student_id, day
         HAVING SUM(status != 'approved') = 0
-    `).all(settlementCutoffDay()) as { studentId: string; day: number }[];
+    `).all(sinceDay, todayKST()) as { studentId: string; day: number }[];
     return candidates.filter((c) => settleDay(db, c.studentId, c.day));
 }
 

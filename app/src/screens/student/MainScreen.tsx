@@ -16,11 +16,11 @@ import { Cloud } from '../../components/Cloud';
 import { Button } from '../../components/Button';
 import { StatusBanner } from '../../components/StatusBanner';
 import { colors, fontFamilies, fontSizes, gradients } from '../../theme';
-import { dayParts, monthDays } from '../../lib/days';
+import { dayParts, formatDeadline, monthDays } from '../../lib/days';
 import type { DayStatus, IslandState } from '../../lib/types';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
 import { useAuthStore } from '../../store/authStore';
-import { useAppStore } from '../../store/appStore';
+import { useAppStore, canRegisterOn } from '../../store/appStore';
 
 // 이번 달 섬 지도 — 한 줄에 COLS개씩 비스듬히 내려가다 끝에서 방향을 바꾸는 굽이길
 const COLS = 4;
@@ -57,7 +57,11 @@ export function MainScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<StudentStackParams>>();
   const { width } = useWindowDimensions();
   const { user } = useAuthStore();
-  const { today, joinedDay, dayStatus, diamonds, streak, monthProgress, character, avatar, fetchMe } = useAppStore();
+  const {
+    today, joinedDay, dayStatus, diamonds, streak, monthProgress, character, avatar, fetchMe,
+    registerDeadlineMin, completeDeadlineMin,
+  } = useAppStore();
+  const registerOpen = canRegisterOn(today, today, registerDeadlineMin);
 
   // 화면 포커스 시 데이터 갱신 + 포커스 유지 중 30초 폴링
   useFocusEffect(useCallback(() => {
@@ -143,7 +147,7 @@ export function MainScreen() {
   useEffect(scrollToToday, [scrollToToday]);
 
   const handleMainAction = () => {
-    if (dayStatus === 'todo') navigation.navigate('TaskRegister', { day: today });
+    if (dayStatus === 'todo' && registerOpen) navigation.navigate('TaskRegister', { day: today });
     else navigation.navigate('TaskList', { day: today });
   };
 
@@ -173,7 +177,8 @@ export function MainScreen() {
               <Text style={styles.dayNum}>{m}월 {d}일</Text>
             </View>
             <Text style={styles.daySub}>
-              {m}월의 섬 {days.length}개 · 정복한 섬 {doneDays.size}개
+              {m}월의 섬 {days.length}개 · 정복한 섬 {doneDays.size}개{'\n'}
+              등록 마감 {formatDeadline(registerDeadlineMin)} · 완료 마감 {formatDeadline(completeDeadlineMin)}
             </Text>
           </View>
         )}
@@ -246,7 +251,7 @@ export function MainScreen() {
               <Button
                 variant={dayStatus === 'approved' ? 'ocean' : 'coral'}
                 size="md"
-                label={ACTION_LABEL[dayStatus]}
+                label={dayStatus === 'todo' && !registerOpen ? '오늘 등록 마감' : ACTION_LABEL[dayStatus]}
                 style={styles.fullBtn}
                 onPress={handleMainAction}
               />

@@ -4,6 +4,7 @@ import type { Db } from '../db.ts';
 import type { AuthHandler } from '../index.ts';
 import { currentStreak, monthProgress } from '../lib/gems.ts';
 import { todayKST } from '../lib/days.ts';
+import { managerDeadlines, studentDeadlines } from '../lib/deadlines.ts';
 
 const PatchBody = z.object({
     name: z.string().min(1).max(30).optional(),
@@ -20,6 +21,11 @@ export function registerMeRoutes(app: FastifyInstance, db: Db, auth: AuthHandler
 
         const { created_at, ...profile } = user;
         const result: Record<string, unknown> = { ...profile, today: todayKST(), joined_day: todayKST(created_at) };
+
+        // 적용되는 마감시간 (학생은 연결된 매니저의 설정)
+        Object.assign(result, user.role === 'manager'
+            ? managerDeadlines(db, req.user.id)
+            : studentDeadlines(db, req.user.id));
 
         if (user.role === 'student') {
             const balance = db.prepare('SELECT diamond FROM gems_balance WHERE student_id = ?')

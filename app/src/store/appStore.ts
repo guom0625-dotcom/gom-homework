@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
 import type { CharacterType, DayStatus } from '../lib/types';
-import { WEEK_MS } from '../lib/days';
+import { WEEK_MS, dayStartMs } from '../lib/days';
 
 export interface Task {
     id: string;
@@ -66,6 +66,8 @@ interface MeData {
     name: string;
     role: 'manager' | 'student';
     today: number;
+    register_deadline_min?: number;
+    complete_deadline_min?: number;
     joined_day?: number;
     diamonds?: number;
     streak?: number;
@@ -73,6 +75,16 @@ interface MeData {
     students?: { id: string; name: string }[];
     character?: string;
     avatar?: string | null;
+}
+
+/** 이 날짜에 새 할일을 등록할 수 있는가 (오늘이고 등록 마감 전) */
+export function canRegisterOn(day: number, today: number, registerDeadlineMin: number): boolean {
+    return day === today && Date.now() < dayStartMs(day) + registerDeadlineMin * 60_000;
+}
+
+/** 이 날짜의 할일을 아직 진행(상신·수정·삭제 요청)할 수 있는가 (완료 마감 전) */
+export function isDayOpen(day: number, completeDeadlineMin: number): boolean {
+    return Date.now() < dayStartMs(day) + completeDeadlineMin * 60_000;
 }
 
 function computeDayStatus(tasks: Task[]): DayStatus {
@@ -88,6 +100,9 @@ interface AppState {
     monthProgress: DaySummary[];
     today: number;              // 서버 기준 오늘 (로딩 전 0)
     joinedDay: number;          // 가입한 날짜
+    // 매니저가 정한 마감시간 — 그 날 0시로부터 몇 분 뒤인지
+    registerDeadlineMin: number;  // 새 할일 등록 마감
+    completeDeadlineMin: number;  // 완료 상신 마감 = 다이아 지급 시각
     streak: number;
     diamonds: number;
     dayStatus: DayStatus;       // 오늘의 상태
@@ -138,6 +153,8 @@ const initialState = {
     monthProgress: [] as DaySummary[],
     today: 0,
     joinedDay: 0,
+    registerDeadlineMin: 1440,
+    completeDeadlineMin: 1800,
     streak: 0,
     diamonds: 0,
     dayStatus: 'todo' as DayStatus,
@@ -171,7 +188,12 @@ export const useAppStore = create<AppState>((set, get) => {
         const me = await api<MeData>('/me');
         const character = (me.character as CharacterType | undefined) ?? 'bear';
         const avatar = me.avatar ?? null;
-        set({ me, today: me.today, joinedDay: me.joined_day ?? 0, diamonds: me.diamonds ?? 0, streak: me.streak ?? 0, character, avatar });
+        set({
+            me, today: me.today, joinedDay: me.joined_day ?? 0,
+            registerDeadlineMin: me.register_deadline_min ?? 1440,
+            completeDeadlineMin: me.complete_deadline_min ?? 1800,
+            diamonds: me.diamonds ?? 0, streak: me.streak ?? 0, character, avatar,
+        });
 
         if (me.role === 'student') {
             const [monthProgress, tasks] = await Promise.all([

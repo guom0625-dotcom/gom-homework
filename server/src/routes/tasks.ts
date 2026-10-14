@@ -5,6 +5,7 @@ import type { Db } from '../db.ts';
 import type { AuthHandler } from '../index.ts';
 import { DAY_REWARD, settleDay } from '../lib/gems.ts';
 import { todayKST } from '../lib/days.ts';
+import { canRegister, isDayClosed, studentDeadlines } from '../lib/deadlines.ts';
 import { sendPush } from '../lib/push.ts';
 
 const CreateBody = z.object({
@@ -50,9 +51,12 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
     const userName = (userId: string): string =>
         (db.prepare('SELECT name FROM users WHERE id = ?').get(userId) as { name: string }).name;
 
-    // 학생 본인의 할일. 학생이 손댈 수 있는 건 오늘 날짜의 할일뿐 (지난 날은 매니저 검토만 남음)
+    // 학생 본인의 할일. 학생은 그 날의 완료 마감시간 전까지만 손댈 수 있다 (그 뒤엔 매니저 검토만 남음)
     const ownTask = (id: string, studentId: string): TaskRow | undefined =>
         db.prepare('SELECT * FROM tasks WHERE id = ? AND student_id = ?').get(id, studentId) as TaskRow | undefined;
+
+    const dayClosed = (studentId: string, day: number): boolean =>
+        isDayClosed(studentDeadlines(db, studentId), day);
 
     // 매니저가 검토할 수 있는 (연결된 학생의) 할일
     const reviewableTask = (id: string, managerId: string): TaskRow | 'not_found' | 'forbidden' => {
@@ -95,7 +99,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         return db.prepare(sql).all(...params);
     });
 
-    // POST /tasks  (student only — 오늘 날짜에만 등록 가능)
+    // POST /tasks  (student only — 오늘 날짜에, 등록 마감시간 전까지만)
     // 등록과 동시에 계획이 상신된다(plan_submitted). 반려되면 학생이 submit-plan 으로 다시 상신.
     app.post('/tasks', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
@@ -104,6 +108,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
 
         const { day, title, memo } = body.data;
         if (day !== todayKST()) return reply.code(409).send({ error: 'not_today' });
+        if (!canRegister(studentDeadlines(db, req.user.id), day)) return reply.code(409).send({ error: 'register_closed' });
 
         const id = ulid();
         db.prepare(`
@@ -129,7 +134,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
 
         const task = ownTask(id, req.user.id);
         if (!task) return reply.code(404).send({ error: 'not_found' });
-        if (task.day !== todayKST()) return reply.code(409).send({ error: 'day_passed' });
+        if (dayClosed(req.user.id, task.day)) return reply.code(409).send({ error: 'day_passed' });
         if (task.status !== 'todo' && task.status !== 'plan_rejected') {
             return reply.code(409).send({ error: 'cannot_edit' });
         }
@@ -154,7 +159,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
 
         const task = ownTask(id, req.user.id);
         if (!task) return reply.code(404).send({ error: 'not_found' });
-        if (task.day !== todayKST()) return reply.code(409).send({ error: 'day_passed' });
+        if (dayClosed(req.user.id, task.day)) return reply.code(409).send({ error: 'day_passed' });
         if (task.status !== 'todo' && task.status !== 'plan_rejected') {
             return reply.code(409).send({ error: 'cannot_submit_plan' });
         }
@@ -225,7 +230,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
 
         const task = ownTask(id, req.user.id);
         if (!task) return reply.code(404).send({ error: 'not_found' });
-        if (task.day !== todayKST()) return reply.code(409).send({ error: 'day_passed' });
+        if (dayClosed(req.user.id, task.day)) return reply.code(409).send({ error: 'day_passed' });
         if (task.status !== 'plan_approved' && task.status !== 'rejected') {
             return reply.code(409).send({ error: 'cannot_submit' });
         }
@@ -300,7 +305,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
 
         const task = ownTask(id, req.user.id);
         if (!task) return reply.code(404).send({ error: 'not_found' });
-        if (task.day !== todayKST()) return reply.code(409).send({ error: 'day_passed' });
+        if (dayClosed(req.user.id, task.day)) return reply.code(409).send({ error: 'day_passed' });
         if (task.status === 'approved' || task.status === 'delete_requested') {
             return reply.code(409).send({ error: 'cannot_delete' });
         }
