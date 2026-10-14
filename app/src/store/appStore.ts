@@ -77,9 +77,16 @@ interface MeData {
     avatar?: string | null;
 }
 
-/** 이 날짜에 새 할일을 등록할 수 있는가 (오늘이고 등록 마감 전) */
-export function canRegisterOn(day: number, today: number, registerDeadlineMin: number): boolean {
-    return day === today && Date.now() < dayStartMs(day) + registerDeadlineMin * 60_000;
+/**
+ * 이 날짜에 새 할일을 등록할 수 있는가.
+ * 등록 마감은 그날 하나도 등록하지 않았을 때만 걸린다 — 이미 등록한 할일이 있으면(hasTasks) 완료 마감 전까지 추가 가능
+ */
+export function canRegisterOn(
+    day: number, today: number, hasTasks: boolean,
+    registerDeadlineMin: number, completeDeadlineMin: number,
+): boolean {
+    if (day !== today || !isDayOpen(day, completeDeadlineMin)) return false;
+    return hasTasks || Date.now() < dayStartMs(day) + registerDeadlineMin * 60_000;
 }
 
 /** 이 날짜의 할일을 아직 진행(상신·수정·삭제 요청)할 수 있는가 (완료 마감 전) */

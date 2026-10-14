@@ -78,7 +78,7 @@ export function DeadlineSettingsScreen({ navigation }: Props) {
                 <ScrollView contentContainerStyle={styles.list}>
                     <TimeRow
                         label="할일 등록 마감"
-                        desc="이 시각이 지나면 그날은 새 할일을 등록할 수 없어요. 반려된 계획을 고쳐 다시 올리는 건 완료 마감 전까지 돼요."
+                        desc="이 시각까지 하나도 등록하지 않으면 그날은 할일을 등록할 수 없어요. 하나라도 등록해 뒀으면 완료 마감 전까지 추가·수정할 수 있어요."
                         value={register}
                         onChange={changeRegister}
                     />

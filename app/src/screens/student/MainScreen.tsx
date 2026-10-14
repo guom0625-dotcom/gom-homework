@@ -63,7 +63,8 @@ export function MainScreen() {
     today, joinedDay, dayStatus, diamonds, streak, monthProgress, character, avatar, fetchMe,
     registerDeadlineMin, completeDeadlineMin,
   } = useAppStore();
-  const registerOpen = canRegisterOn(today, today, registerDeadlineMin);
+  // dayStatus 가 todo 가 아니면 오늘 등록한 할일이 있다는 뜻 → 등록 마감이 지나도 추가 가능
+  const registerOpen = canRegisterOn(today, today, dayStatus !== 'todo', registerDeadlineMin, completeDeadlineMin);
 
   // 화면 포커스 시 데이터 갱신 + 포커스 유지 중 30초 폴링
   useFocusEffect(useCallback(() => {

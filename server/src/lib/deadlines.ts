@@ -36,9 +36,14 @@ export function studentDeadlines(db: Db, studentId: string): Deadlines {
     return row ?? DEFAULT_DEADLINES;
 }
 
-/** 지금 이 날짜에 새 할일을 등록할 수 있는가 (오늘 날짜이고 등록 마감 전) */
-export function canRegister(d: Deadlines, day: number, now: number = Date.now()): boolean {
-    return day === todayKST(now) && now < dayStartMs(day) + d.register_deadline_min * 60_000;
+/**
+ * 지금 이 날짜에 새 할일을 등록할 수 있는가.
+ * 등록 마감은 "그날 하나도 등록하지 않은 경우"에만 걸린다 — 마감 전에 하나라도 등록해 뒀으면(hasTasks)
+ * 그 뒤에도 완료 마감 전까지는 계속 추가할 수 있다.
+ */
+export function canRegister(d: Deadlines, day: number, hasTasks: boolean, now: number = Date.now()): boolean {
+    if (day !== todayKST(now) || isDayClosed(d, day, now)) return false;
+    return hasTasks || now < dayStartMs(day) + d.register_deadline_min * 60_000;
 }
 
 /** 이 날짜의 완료 마감(=지급 시각)이 지났는가 */

@@ -99,7 +99,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         return db.prepare(sql).all(...params);
     });
 
-    // POST /tasks  (student only — 오늘 날짜에, 등록 마감시간 전까지만)
+    // POST /tasks  (student only — 오늘 날짜에. 등록 마감이 지났어도 오늘 등록해 둔 할일이 있으면 완료 마감 전까지 추가 가능)
     // 등록과 동시에 계획이 상신된다(plan_submitted). 반려되면 학생이 submit-plan 으로 다시 상신.
     app.post('/tasks', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
@@ -108,7 +108,10 @@ export function registerTaskRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
 
         const { day, title, memo } = body.data;
         if (day !== todayKST()) return reply.code(409).send({ error: 'not_today' });
-        if (!canRegister(studentDeadlines(db, req.user.id), day)) return reply.code(409).send({ error: 'register_closed' });
+        const hasTasks = !!db.prepare('SELECT 1 FROM tasks WHERE student_id = ? AND day = ?').get(req.user.id, day);
+        if (!canRegister(studentDeadlines(db, req.user.id), day, hasTasks)) {
+            return reply.code(409).send({ error: 'register_closed' });
+        }
 
         const id = ulid();
         db.prepare(`
