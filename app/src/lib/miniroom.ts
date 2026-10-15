@@ -4,7 +4,7 @@
 // (x = 0 쪽이 왼쪽 벽, z = 0 쪽이 오른쪽 벽). 카메라는 45° 돌려 45° 내려다보는 Kenney 렌더와 같다.
 import { FURNITURE_BY_KEY, FURNITURE_CELL as CELL, type FurnitureDef } from './furnitureData';
 
-export const ROOM_SIZE = 20;
+export const ROOM_SIZE = 16;
 export const WALL_H = 1.6;          // 벽 높이 (모델 단위) — 큰 책장(0.9)·2층 침대보다 넉넉히
 const C = Math.SQRT1_2;
 const SPAN = ROOM_SIZE * CELL;      // 방 한 변 (모델 단위)
