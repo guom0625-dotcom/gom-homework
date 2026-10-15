@@ -294,17 +294,20 @@ export function MiniRoomScreen({ navigation }: Props) {
 
             <View style={styles.roomWrap}>
                 {/* 터치 좌표가 방 그림과 딱 맞도록 방 크기 상자에 터치를 건다 */}
-                <View {...pan.panHandlers}>
-                    <MiniRoom
-                        layout={layout}
-                        wall={room.wall}
-                        floor={room.floor}
-                        items={placed}
-                        selectedId={selectedId}
-                        invalid={invalid}
-                        onDrawn={list => { drawnRef.current = list; }}
-                        outfit={room.avatar?.outfit}
-                    />
+                {/* 버튼은 터치 상자 밖(형제)에 둔다 — 안에 두면 손가락이 조금만 움직여도 방이 터치를 가져가 버튼이 안 눌림 */}
+                <View>
+                    <View {...pan.panHandlers}>
+                        <MiniRoom
+                            layout={layout}
+                            wall={room.wall}
+                            floor={room.floor}
+                            items={placed}
+                            selectedId={selectedId}
+                            invalid={invalid}
+                            onDrawn={list => { drawnRef.current = list; }}
+                            outfit={room.avatar?.outfit}
+                        />
+                    </View>
                     {zoomer.zoom > 1.01 && (
                         <TouchableOpacity style={styles.zoomReset} onPress={zoomer.reset}>
                             <Text style={styles.zoomResetText}>전체 보기</Text>

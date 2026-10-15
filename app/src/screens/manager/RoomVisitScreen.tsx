@@ -89,8 +89,11 @@ export function RoomVisitScreen({ navigation, route }: Props) {
                 </View>
             ) : (
                 <View style={styles.body}>
-                    <View {...pan.panHandlers}>
-                        <MiniRoom layout={zoomer.layout} wall={room.wall} floor={room.floor} items={withAvatar} outfit={room.avatar?.outfit} />
+                    {/* 버튼은 터치 상자 밖(형제)에 둔다 — 안에 두면 손가락이 조금만 움직여도 방이 터치를 가져가 버튼이 안 눌림 */}
+                    <View>
+                        <View {...pan.panHandlers}>
+                            <MiniRoom layout={zoomer.layout} wall={room.wall} floor={room.floor} items={withAvatar} outfit={room.avatar?.outfit} />
+                        </View>
                         {zoomer.zoom > 1.01 && (
                             <TouchableOpacity style={styles.zoomReset} onPress={zoomer.reset}>
                                 <Text style={styles.zoomResetText}>전체 보기</Text>
