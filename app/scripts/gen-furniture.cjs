@@ -106,6 +106,12 @@ const ITEMS = [
     ['cardboardBoxClosed', '상자', 'deco', 1, 'floor', true],
     ['cardboardBoxOpen', '열린 상자', 'deco', 1, 'floor'],
     ['trashcan', '휴지통', 'deco', 1, 'floor'],
+    // 직접 만든 소품 (custom-furniture.cjs)
+    ['mug', '머그컵', 'deco', 1, 'small'],
+    ['cactusPot', '선인장 화분', 'deco', 2, 'small'],
+    ['backpack', '배낭', 'deco', 2, 'small'],
+    ['giftBox', '선물 상자', 'deco', 3, 'small'],
+    ['toolbox', '공구함', 'deco', 2, 'small'],
     // 주방·욕실
     ['kitchenFridge', '냉장고', 'kitchen', 6, 'floor'],
     ['kitchenFridgeLarge', '양문 냉장고', 'kitchen', 8, 'floor'],
@@ -144,6 +150,70 @@ function readObj(key) {
     }
     return v;
 }
+// 직접 만든 소품 (custom-furniture.cjs) 을 Kenney 그림과 같은 배율로 그린다
+const { MODELS } = require('./custom-furniture.cjs');
+const PX = 146.3;            // Kenney 그림의 px / 모델 단위
+const CAM = [0.5, Math.SQRT1_2, 0.5];  // 카메라 쪽 방향
+function shadeHex(hex, f) {
+    const n = parseInt(hex.slice(1), 16);
+    return [16, 8, 0].map(s => Math.round(((n >> s) & 255) * f));
+}
+// parts: 회전·바닥 원점 이동이 끝난 부품들. (cx, cz): 바닥 가운데. 그림 왼쪽 위 = (ox, oy) 모델 단위
+function renderPng(parts, cx, cz, ox, oy, iw, ih, file) {
+    const SS = 4;  // 4x4 슈퍼샘플링으로 가장자리를 부드럽게
+    const W = Math.max(1, Math.round(iw * PX)), H = Math.max(1, Math.round(ih * PX));
+    const acc = new Float32Array(W * H * 4);
+    const proj = ([x, y, z]) => [
+        ((((x - cx) - (z - cz)) * C) - ox) * PX * SS,
+        ((((x - cx) + (z - cz)) * 0.5 - y * C) - oy) * PX * SS,
+    ];
+    const depth = (pts) => pts.reduce((s, [x, y, z]) => s + x * CAM[0] + y * CAM[1] + z * CAM[2], 0) / pts.length;
+    const order = parts.map(faces => ({ faces, d: depth(faces.flatMap(f => f.pts)) })).sort((a, b) => a.d - b.d);
+    const buf = new Uint8Array(W * SS * H * SS * 4);  // 샘플마다 마지막에 칠한 색
+    for (const { faces } of order) {
+        for (const f of faces) {
+            const [nx, ny, nz] = f.n;
+            if (nx * CAM[0] + ny * CAM[1] + nz * CAM[2] <= 1e-6) continue;  // 뒷면
+            const len = Math.hypot(nx, nz) || 1;
+            const k = ny > 0.5 ? 1 : 0.79 + 0.07 * (nz - nx) / len;
+            const [r, g, b] = shadeHex(f.color, k);
+            const pts = f.pts.map(proj);
+            const ys = pts.map(p => p[1]);
+            const y0 = Math.max(0, Math.floor(Math.min(...ys))), y1 = Math.min(H * SS - 1, Math.ceil(Math.max(...ys)));
+            for (let y = y0; y <= y1; y++) {
+                const py = y + 0.5, xs = [];
+                for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+                    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+                    if ((yi > py) !== (yj > py)) xs.push(xi + (py - yi) * (xj - xi) / (yj - yi));
+                }
+                xs.sort((a, b) => a - b);
+                for (let q = 0; q + 1 < xs.length; q += 2) {
+                    const xa = Math.max(0, Math.ceil(xs[q] - 0.5)), xb = Math.min(W * SS - 1, Math.floor(xs[q + 1] - 0.5));
+                    for (let x = xa; x <= xb; x++) {
+                        const o = (y * W * SS + x) * 4;
+                        buf[o] = r; buf[o + 1] = g; buf[o + 2] = b; buf[o + 3] = 255;
+                    }
+                }
+            }
+        }
+    }
+    for (let y = 0; y < H * SS; y++) for (let x = 0; x < W * SS; x++) {
+        const o = (y * W * SS + x) * 4;
+        if (!buf[o + 3]) continue;
+        const t = ((y / SS | 0) * W + (x / SS | 0)) * 4;
+        acc[t] += buf[o]; acc[t + 1] += buf[o + 1]; acc[t + 2] += buf[o + 2]; acc[t + 3] += 1;
+    }
+    const { PNG } = require('pngjs');
+    const png = new PNG({ width: W, height: H });
+    for (let i = 0; i < W * H; i++) {
+        const n = acc[i * 4 + 3];
+        if (!n) continue;
+        png.data[i * 4] = acc[i * 4] / n; png.data[i * 4 + 1] = acc[i * 4 + 1] / n; png.data[i * 4 + 2] = acc[i * 4 + 2] / n;
+        png.data[i * 4 + 3] = Math.round(255 * n / (SS * SS));
+    }
+    fs.writeFileSync(file, PNG.sync.write(png));
+}
+
 const pngSize = (file) => {
     const b = fs.readFileSync(file);
     return [b.readUInt32BE(16), b.readUInt32BE(20)];
@@ -158,7 +228,8 @@ fs.copyFileSync(path.join(KIT, 'License.txt'), path.join(outImg, 'License.txt'))
 const defs = [];
 const scales = [];
 for (const [key, name, cat, topaz, type, surface] of ITEMS) {
-    const verts = readObj(key);
+    const model = MODELS[key];  // 직접 만든 소품이면 부품 목록, 아니면 Kenney OBJ
+    const verts = model ? model.flat().flatMap(f => f.pts) : readObj(key);
     const minY = Math.min(...verts.map(p => p[1]));
     const height = Math.max(...verts.map(p => p[1])) - minY;
     const dirs = [];
@@ -178,10 +249,17 @@ for (const [key, name, cat, topaz, type, surface] of ITEMS) {
         const sy = pts.map(([x, y, z]) => ((x - cx) + (z - cz)) * 0.5 - y * C);
         const ox = Math.min(...sx), oy = Math.min(...sy);
         const iw = Math.max(...sx) - ox, ih = Math.max(...sy) - oy;
-        const file = path.join(KIT, 'Isometric', `${key}_${DIRS[r]}.png`);
-        const [pw, ph] = pngSize(file);
-        scales.push([key, DIRS[r], pw / iw, ph / ih]);
-        fs.copyFileSync(file, path.join(outImg, `${key}_${DIRS[r]}.png`));
+        const out = path.join(outImg, `${key}_${DIRS[r]}.png`);
+        if (model) {
+            const rot = ([x, y, z]) => { for (let i = 0; i < r; i++) [x, z] = [z, -x]; return [x, y - minY, z]; };
+            const parts = model.map(faces => faces.map(f => ({ ...f, pts: f.pts.map(rot), n: rot([f.n[0], f.n[1] + minY, f.n[2]]) })));
+            renderPng(parts, cx, cz, ox, oy, iw, ih, out);
+        } else {
+            const file = path.join(KIT, 'Isometric', `${key}_${DIRS[r]}.png`);
+            const [pw, ph] = pngSize(file);
+            scales.push([key, DIRS[r], pw / iw, ph / ih]);
+            fs.copyFileSync(file, out);
+        }
         dirs.push([w, d, r3(ox), r3(oy), r3(iw), r3(ih)]);
     }
     defs.push({ key, name, cat, topaz, type, h: r3(height), surface: surface ? r3(height) : 0, dirs });
