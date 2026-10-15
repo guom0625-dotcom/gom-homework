@@ -2,7 +2,8 @@
 //
 // 방 바닥은 ROOM_SIZE x ROOM_SIZE 칸. 칸 좌표 x 는 화면 오른쪽 아래로, z 는 왼쪽 아래로 늘어난다
 // (x = 0 쪽이 왼쪽 벽, z = 0 쪽이 오른쪽 벽). 카메라는 45° 돌려 45° 내려다보는 Kenney 렌더와 같다.
-import { FURNITURE_BY_KEY, FURNITURE_CELL as CELL, type FurnitureDef } from './furnitureData';
+import { FURNITURE_BY_KEY, FURNITURE_CELL as CELL, type FurnitureDef, type FurnitureDir } from './furnitureData';
+import { VOXEL, AVATAR_EXTENT, type Outfit } from './avatar';
 
 export const ROOM_SIZE = 16;
 export const WALL_H = 1.6;          // 벽 높이 (모델 단위) — 큰 책장(0.9)·2층 침대보다 넉넉히
@@ -24,7 +25,35 @@ export interface Room {
     wall: string;
     floor: string;
     items: RoomItem[];
+    // 미니미 (예전 서버면 없음). x, z 가 null 이면 아직 놓은 적 없음
+    avatar?: { outfit: Outfit; x: number | null; z: number | null; rot: number };
+    wear?: string[];   // 산 옷
 }
+
+// 미니미는 방 안에서 가구처럼 다룬다 (끌기·돌리기). 창고에는 안 들어감
+export const AVATAR_ID = 'avatar';
+export const AVATAR_KEY = '__avatar';
+const C_ = Math.SQRT1_2;
+const avatarDirs: FurnitureDir[] = [0, 1, 2, 3].map(rot => {
+    // 모자 챙까지 포함한 상자를 돌려서 화면에 투영한 범위 (발밑 가운데 기준)
+    const e = AVATAR_EXTENT;
+    const pts: [number, number, number][] = [];
+    for (const x of [e.x0, e.x1]) for (const z of [e.z0, e.z1]) for (const y of [0, e.y1]) {
+        let [px, pz] = [x, z];
+        for (let i = 0; i < rot; i++) [px, pz] = [pz, -px];
+        pts.push([px * VOXEL, y * VOXEL, pz * VOXEL]);
+    }
+    const sx = pts.map(([x, , z]) => (x - z) * C_), sy = pts.map(([x, y, z]) => (x + z) * 0.5 - y * C_);
+    const ox = Math.min(...sx), oy = Math.min(...sy);
+    return [1, 1, ox, oy, Math.max(...sx) - ox, Math.max(...sy) - oy];
+});
+export const AVATAR_DEF: FurnitureDef = {
+    key: AVATAR_KEY, name: '나', cat: 'deco', topaz: 0, type: 'floor',
+    h: AVATAR_EXTENT.y1 * VOXEL, surface: 0, dirs: avatarDirs,
+};
+
+export const avatarItem = (x: number, z: number, rot: number): RoomItem =>
+    ({ id: AVATAR_ID, item_key: AVATAR_KEY, placed: true, x, z, rot, bought_at: 0 });
 
 // 벽지·바닥 색 (무료로 바꿀 수 있다). 서버에는 이름만 저장
 export const WALL_COLORS: Record<string, { name: string; color: string }> = {
@@ -76,7 +105,8 @@ export function project(l: Layout, X: number, Y: number, Z: number): [number, nu
     return [l.ox + (X - Z) * C * l.k, l.oy + ((X + Z) * 0.5 - Y * C) * l.k];
 }
 
-export const defOf = (item: RoomItem): FurnitureDef | undefined => FURNITURE_BY_KEY[item.item_key];
+export const defOf = (item: RoomItem): FurnitureDef | undefined =>
+    item.item_key === AVATAR_KEY ? AVATAR_DEF : FURNITURE_BY_KEY[item.item_key];
 
 // 방향에 따라 차지하는 칸 [가로(x), 세로(z)]
 export function footprint(def: FurnitureDef, rot: number): [number, number] {

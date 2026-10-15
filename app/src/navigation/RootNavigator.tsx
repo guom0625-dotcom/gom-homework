@@ -26,6 +26,7 @@ import { WeeklyReportScreen } from '../screens/manager/WeeklyReportScreen';
 import { ProfileScreen } from '../screens/student/ProfileScreen';
 import { MiniRoomScreen } from '../screens/student/MiniRoomScreen';
 import { FurnitureShopScreen } from '../screens/student/FurnitureShopScreen';
+import { WardrobeScreen } from '../screens/student/WardrobeScreen';
 import { RoomVisitScreen } from '../screens/manager/RoomVisitScreen';
 import { colors, fontFamilies, fontSizes, radius } from '../theme';
 
@@ -47,6 +48,7 @@ export type StudentStackParams = {
     Profile: undefined;
     MiniRoom: undefined;
     FurnitureShop: undefined;
+    Wardrobe: undefined;
 };
 
 export type ManagerStackParams = {
@@ -79,6 +81,7 @@ function StudentNavigator() {
             <StudentStack.Screen name="Profile" component={ProfileScreen} />
             <StudentStack.Screen name="MiniRoom" component={MiniRoomScreen} />
             <StudentStack.Screen name="FurnitureShop" component={FurnitureShopScreen} />
+            <StudentStack.Screen name="Wardrobe" component={WardrobeScreen} />
         </StudentStack.Navigator>
     );
 }

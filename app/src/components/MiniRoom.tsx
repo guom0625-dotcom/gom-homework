@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react';
 import { View, Image } from 'react-native';
 import Svg, { Polygon, Line } from 'react-native-svg';
+import { avatarPolys, VOXEL, AVATAR_EXTENT, type Outfit } from '../lib/avatar';
 import { FURNITURE_IMAGES, FURNITURE_CELL as CELL } from '../lib/furnitureData';
 import {
     ROOM_SIZE, WALL_H, WALL_COLORS, FLOOR_COLORS,
-    project, drawnOf, drawOrder, footprint, defOf,
+    project, drawnOf, drawOrder, footprint, defOf, AVATAR_KEY,
     type Layout, type RoomItem, type Drawn,
 } from '../lib/miniroom';
 
@@ -23,10 +24,11 @@ interface Props {
     selectedId?: string | null;
     invalid?: boolean;            // 선택한 가구가 지금 자리에 놓일 수 없음
     onDrawn?: (list: Drawn[]) => void;  // 터치 판정용으로 그린 결과를 알려준다
+    outfit?: Outfit;              // 미니미 옷차림 (items 에 미니미가 있을 때)
 }
 
 // 미니룸 그림 — 벽·바닥은 SVG, 가구는 Kenney 아이소메트릭 그림. 터치는 부모가 처리한다
-export function MiniRoom({ layout: l, wall, floor, items, selectedId, invalid, onDrawn }: Props) {
+export function MiniRoom({ layout: l, wall, floor, items, selectedId, invalid, onDrawn, outfit }: Props) {
     const wallColor = (WALL_COLORS[wall] ?? WALL_COLORS.cream).color;
     const floorColor = (FLOOR_COLORS[floor] ?? FLOOR_COLORS.wood).color;
     const S = ROOM_SIZE * CELL;
@@ -75,7 +77,9 @@ export function MiniRoom({ layout: l, wall, floor, items, selectedId, invalid, o
                         stroke={invalid ? '#ff5050' : '#00b894'} strokeWidth={2} />
                 )}
             </Svg>
-            {drawn.map(d => (
+            {drawn.map(d => d.item.item_key === AVATAR_KEY ? (
+                outfit ? <AvatarInRoom key={d.item.id} d={d} l={l} outfit={outfit} dim={d.item.id === selectedId && invalid} /> : null
+            ) : (
                 <Image
                     key={d.item.id}
                     source={FURNITURE_IMAGES[d.item.item_key][d.item.rot & 3]}
@@ -88,6 +92,43 @@ export function MiniRoom({ layout: l, wall, floor, items, selectedId, invalid, o
                 />
             ))}
         </View>
+    );
+}
+
+// 방 안의 미니미 — 차지하는 사각형 크기의 SVG 에 상자 면을 그린다
+function AvatarInRoom({ d, l, outfit, dim }: { d: Drawn; l: Layout; outfit: Outfit; dim?: boolean }) {
+    const cx = (d.item.x + 0.5) * CELL, cz = (d.item.z + 0.5) * CELL;
+    const polys = useMemo(
+        () => avatarPolys(outfit, d.item.rot & 3, cx, cz, d.elev, (X, Y, Z) => {
+            const [px, py] = project(l, X, Y, Z);
+            return [px - d.left, py - d.top];
+        }),
+        [outfit, d.item.rot, cx, cz, d.elev, l, d.left, d.top],
+    );
+    return (
+        <Svg width={d.width} height={d.height}
+            style={{ position: 'absolute', left: d.left, top: d.top, opacity: dim ? 0.55 : 1 }}>
+            {polys.map((p, i) => <Polygon key={i} points={p.points} fill={p.fill} />)}
+        </Svg>
+    );
+}
+
+// 미니미 미리보기 (옷장용) — size 픽셀 정사각형 안에 꽉 차게
+export function AvatarView({ outfit, size, rot = 2 }: { outfit: Outfit; size: number; rot?: number }) {
+    const polys = useMemo(() => {
+        const e = AVATAR_EXTENT;
+        // 모델 크기 → 화면: 높이 기준으로 맞춘다
+        const k = size * 0.82 / ((e.y1 * Math.SQRT1_2 + (e.x1 - e.z0) * 0.5) * VOXEL);
+        const base = size * 0.9;
+        return avatarPolys(outfit, rot & 3, 0, 0, 0, (X, Y, Z) => [
+            size / 2 + (X - Z) * Math.SQRT1_2 * k,
+            base + ((X + Z) * 0.5 - Y * Math.SQRT1_2) * k,
+        ]);
+    }, [outfit, rot, size]);
+    return (
+        <Svg width={size} height={size}>
+            {polys.map((p, i) => <Polygon key={i} points={p.points} fill={p.fill} />)}
+        </Svg>
     );
 }
 

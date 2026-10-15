@@ -9,7 +9,7 @@ import type { RouteProp } from '@react-navigation/native';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { api } from '../../api/client';
 import { MiniRoom } from '../../components/MiniRoom';
-import { makeLayout, type Room } from '../../lib/miniroom';
+import { makeLayout, findSpot, avatarItem, AVATAR_DEF, AVATAR_ID, type Room } from '../../lib/miniroom';
 import { useRoomZoom } from '../../hooks/useRoomZoom';
 import { colors, fontFamilies, fontSizes, radius } from '../../theme';
 
@@ -66,6 +66,10 @@ export function RoomVisitScreen({ navigation, route }: Props) {
     }, [studentId]));
 
     const placed = room?.items.filter(i => i.placed) ?? [];
+    // 학생이 방에 놓은 미니미도 같이 (아직 안 놓았으면 가운데 근처)
+    const av = room?.avatar;
+    const avSpot = av ? (av.x != null && av.z != null ? [av.x, av.z] : findSpot(placed, AVATAR_ID, AVATAR_DEF, av.rot)) : null;
+    const withAvatar = av && avSpot ? [...placed, avatarItem(avSpot[0], avSpot[1], av.rot)] : placed;
     const stored = (room?.items.length ?? 0) - placed.length;
 
     return (
@@ -86,7 +90,7 @@ export function RoomVisitScreen({ navigation, route }: Props) {
             ) : (
                 <View style={styles.body}>
                     <View {...pan.panHandlers}>
-                        <MiniRoom layout={zoomer.layout} wall={room.wall} floor={room.floor} items={placed} />
+                        <MiniRoom layout={zoomer.layout} wall={room.wall} floor={room.floor} items={withAvatar} outfit={room.avatar?.outfit} />
                         {zoomer.zoom > 1.01 && (
                             <TouchableOpacity style={styles.zoomReset} onPress={zoomer.reset}>
                                 <Text style={styles.zoomResetText}>전체 보기</Text>

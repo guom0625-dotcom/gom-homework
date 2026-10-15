@@ -15,6 +15,7 @@ import { useRoomZoom } from '../../hooks/useRoomZoom';
 import { FURNITURE_CELL as CELL } from '../../lib/furnitureData';
 import {
     makeLayout, defOf, canPlace, clampToRoom, findSpot, surfaceUnder, inRoom, hitTest,
+    avatarItem, AVATAR_DEF, AVATAR_ID,
     WALL_COLORS, FLOOR_COLORS,
     type Room, type RoomItem, type Drawn,
 } from '../../lib/miniroom';
@@ -47,7 +48,14 @@ export function MiniRoomScreen({ navigation }: Props) {
         try {
             const r = await api<Room>('/room');
             setRoom(r);
-            setItems(r.items);
+            // 미니미도 가구처럼 방에 놓는다 — 한 번도 놓은 적 없으면 가운데 근처 빈자리
+            if (r.avatar) {
+                const a = r.avatar;
+                const spot = a.x != null && a.z != null ? [a.x, a.z] : findSpot(r.items, AVATAR_ID, AVATAR_DEF, a.rot);
+                setItems(spot ? [...r.items, avatarItem(spot[0], spot[1], a.rot)] : r.items);
+            } else {
+                setItems(r.items);
+            }
         } catch {
             Alert.alert('오류', '방을 불러오지 못했어요');
         }
@@ -295,6 +303,7 @@ export function MiniRoomScreen({ navigation }: Props) {
                         selectedId={selectedId}
                         invalid={invalid}
                         onDrawn={list => { drawnRef.current = list; }}
+                        outfit={room.avatar?.outfit}
                     />
                     {zoomer.zoom > 1.01 && (
                         <TouchableOpacity style={styles.zoomReset} onPress={zoomer.reset}>
@@ -310,15 +319,21 @@ export function MiniRoomScreen({ navigation }: Props) {
                     <TouchableOpacity style={styles.toolBtn} onPress={rotate}>
                         <Text style={styles.toolBtnText}>↻ 돌리기</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.toolBtn} onPress={putAway}>
-                        <Text style={styles.toolBtnText}>📦 창고로</Text>
-                    </TouchableOpacity>
+                    {selected.id === AVATAR_ID ? (
+                        <TouchableOpacity style={styles.toolBtn} onPress={() => navigation.navigate('Wardrobe')}>
+                            <Text style={styles.toolBtnText}>👕 옷장</Text>
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity style={styles.toolBtn} onPress={putAway}>
+                            <Text style={styles.toolBtnText}>📦 창고로</Text>
+                        </TouchableOpacity>
+                    )}
                     <TouchableOpacity style={[styles.toolBtn, styles.toolDone]} onPress={() => setSelectedId(null)}>
                         <Text style={[styles.toolBtnText, { color: '#fff' }]}>완료</Text>
                     </TouchableOpacity>
                 </View>
             ) : (
-                <Text style={styles.hint}>가구를 눌러 고르고 끌어서 옮겨요 · 두 손가락으로 확대</Text>
+                <Text style={styles.hint}>가구나 나를 눌러 고르고 끌어서 옮겨요 · 두 손가락으로 확대</Text>
             )}
 
             <View style={styles.tabs}>
@@ -330,9 +345,16 @@ export function MiniRoomScreen({ navigation }: Props) {
                 <TouchableOpacity style={[styles.tab, tab === 'style' && styles.tabActive]} onPress={() => setTab('style')}>
                     <Text style={[styles.tabText, tab === 'style' && styles.tabTextActive]}>벽지·바닥</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.shopBtn} onPress={() => navigation.navigate('FurnitureShop')}>
-                    <Text style={styles.shopBtnText}>🛒 가구점</Text>
-                </TouchableOpacity>
+                <View style={styles.shopBtns}>
+                    <TouchableOpacity style={styles.shopBtn} onPress={() => navigation.navigate('FurnitureShop')}>
+                        <Text style={styles.shopBtnText}>🛒 가구점</Text>
+                    </TouchableOpacity>
+                    {room.avatar && (
+                        <TouchableOpacity style={[styles.shopBtn, styles.wardrobeBtn]} onPress={() => navigation.navigate('Wardrobe')}>
+                            <Text style={styles.shopBtnText}>👕 옷장</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
 
             {tab === 'storage' ? (
@@ -463,7 +485,7 @@ const styles = StyleSheet.create({
         paddingRight: 10,
     },
     tab: {
-        paddingHorizontal: 16,
+        paddingHorizontal: 12,
         paddingVertical: 10,
         borderBottomWidth: 2,
         borderBottomColor: 'transparent',
@@ -475,8 +497,9 @@ const styles = StyleSheet.create({
         color: colors.ink[300],
     },
     tabTextActive: { color: colors.ocean[700] },
+    shopBtns: { marginLeft: 'auto', flexDirection: 'row', gap: 6 },
+    wardrobeBtn: { backgroundColor: colors.grape[300] },
     shopBtn: {
-        marginLeft: 'auto',
         backgroundColor: colors.sun[300],
         borderRadius: radius.pill,
         paddingHorizontal: 12,
