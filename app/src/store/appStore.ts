@@ -76,6 +76,7 @@ export interface StudentSummary {
     joined_day: number;      // 가입한 날짜
     diamonds: number;
     rubies: number;
+    topaz: number;           // 미니룸 가구용 (예전 서버면 없음)
     pending_books: number;   // 완료 승인을 기다리는 책 수
     today_total: number;     // 오늘 등록한 할일 수
     pending_review: number;  // 매니저 검토를 기다리는 할일 수
@@ -87,6 +88,7 @@ interface MeData {
     role: 'manager' | 'student';
     today: number;
     rubies?: number;
+    topaz?: number;
     register_deadline_min?: number;
     complete_deadline_min?: number;
     register_deadline_enabled?: boolean;
@@ -138,6 +140,8 @@ interface AppState {
     streak: number;
     diamonds: number;
     rubies: number;
+    topaz: number;              // 미니룸 가구를 사는 보석
+    setGems: (g: { diamonds: number; rubies: number; topaz: number }) => void;
     dayStatus: DayStatus;       // 오늘의 상태
     character: CharacterType;
     avatar: string | null;
@@ -201,6 +205,7 @@ const initialState = {
     streak: 0,
     diamonds: 0,
     rubies: 0,
+    topaz: 0,
     dayStatus: 'todo' as DayStatus,
     character: 'bear' as CharacterType,
     avatar: null as string | null,
@@ -240,7 +245,8 @@ export const useAppStore = create<AppState>((set, get) => {
             registerDeadlineMin: me.register_deadline_min ?? 1440,
             registerDeadlineEnabled: me.register_deadline_enabled ?? false,
             completeDeadlineMin: me.complete_deadline_min ?? 1800,
-            diamonds: me.diamonds ?? 0, rubies: me.rubies ?? 0, streak: me.streak ?? 0, character, avatar,
+            diamonds: me.diamonds ?? 0, rubies: me.rubies ?? 0, topaz: me.topaz ?? 0,
+            streak: me.streak ?? 0, character, avatar,
         });
 
         if (me.role === 'student') {
@@ -290,6 +296,8 @@ export const useAppStore = create<AppState>((set, get) => {
         const res = await api<{ status: Task['status'] }>(`/tasks/${id}/cancel-delete`, { method: 'POST' });
         patchTask(id, res.status);
     },
+
+    setGems: ({ diamonds, rubies, topaz }) => set({ diamonds, rubies, topaz }),
 
     updateProfile: async (character, avatar) => {
         const body: Record<string, unknown> = { character };

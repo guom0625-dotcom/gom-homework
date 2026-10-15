@@ -11,6 +11,7 @@ import { api } from '../../api/client';
 import { useAppStore } from '../../store/appStore';
 import { Price } from '../../components/Price';
 import { MiniRoom, FurnitureThumb } from '../../components/MiniRoom';
+import { useRoomZoom } from '../../hooks/useRoomZoom';
 import { FURNITURE_CELL as CELL } from '../../lib/furnitureData';
 import {
     makeLayout, defOf, canPlace, clampToRoom, findSpot, surfaceUnder, inRoom, hitTest,
@@ -32,8 +33,10 @@ interface Drag {
 // 내 방: 가구점에서 산 가구는 창고에 → 꺼내서 끌어다 놓고, 눌러서 돌리고, 다시 창고에 넣을 수 있다
 export function MiniRoomScreen({ navigation }: Props) {
     const { width } = useWindowDimensions();
-    const layout = useMemo(() => makeLayout(width - 16), [width]);
-    const { diamonds, rubies, fetchMe } = useAppStore();
+    const base = useMemo(() => makeLayout(width - 16), [width]);
+    const zoomer = useRoomZoom(base);
+    const layout = zoomer.layout;
+    const { topaz, fetchMe } = useAppStore();
     const [room, setRoom] = useState<Room | null>(null);
     const [items, setItems] = useState<RoomItem[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -89,28 +92,58 @@ export function MiniRoomScreen({ navigation }: Props) {
         !canPlace(items, selected.id, selectedDef, dragPos.x, dragPos.z, selected.rot));
 
     // PanResponder 는 한 번만 만들어지므로 최신 값은 ref 로 읽는다
-    const live = useRef({ items, selectedId, layout });
-    live.current = { items, selectedId, layout };
+    const live = useRef({ items, selectedId, layout, zoomer });
+    live.current = { items, selectedId, layout, zoomer };
     const drawnRef = useRef<Drawn[]>([]);
     const dragRef = useRef<Drag | null>(null);
     const posRef = useRef<{ x: number; z: number } | null>(null);
+    // 지금 손가락이 하는 일: 가구 끌기 / 방 이동 / 두 손가락 확대
+    const modeRef = useRef<'item' | 'pan' | 'pinch'>('pan');
 
     const pan = useMemo(() => PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (e) => {
+            const zm = live.current.zoomer;
+            zm.setOffsetFrom(e);
+            dragRef.current = null;
+            posRef.current = null;
+            if (e.nativeEvent.touches.length >= 2) {
+                modeRef.current = 'pinch';
+                zm.pinchMove(e);
+                return;
+            }
             const { locationX: px, locationY: py } = e.nativeEvent;
             const hit = hitTest(drawnRef.current, px, py, live.current.selectedId);
             if (hit) {
+                modeRef.current = 'item';
                 setSelectedId(hit.item.id);
                 dragRef.current = { id: hit.item.id, startX: hit.item.x, startZ: hit.item.z, moved: false };
             } else {
-                dragRef.current = null;
+                modeRef.current = 'pan';
+                zm.panBegin();
             }
-            posRef.current = null;
         },
-        onPanResponderMove: (_e, g) => {
+        onPanResponderMove: (e, g) => {
+            const zm = live.current.zoomer;
+            // 두 번째 손가락이 닿으면 하던 끌기는 취소하고 확대로
+            if (e.nativeEvent.touches.length >= 2) {
+                if (modeRef.current !== 'pinch') {
+                    modeRef.current = 'pinch';
+                    dragRef.current = null;
+                    posRef.current = null;
+                    setDragPos(null);
+                    zm.panEnd();
+                }
+                zm.pinchMove(e);
+                return;
+            }
+            if (modeRef.current === 'pinch') return;  // 손가락 하나 뗀 뒤 — 다 뗄 때까지 무시
+            if (modeRef.current === 'pan') {
+                zm.panMove(g.dx, g.dy);
+                return;
+            }
             const drag = dragRef.current;
             if (!drag) return;
             const item = live.current.items.find(i => i.id === drag.id);
@@ -131,11 +164,17 @@ export function MiniRoomScreen({ navigation }: Props) {
             }
         },
         onPanResponderRelease: (_e, g) => {
+            const zm = live.current.zoomer;
+            const mode = modeRef.current;
+            modeRef.current = 'pan';
+            zm.pinchEnd();
+            zm.panEnd();
             const drag = dragRef.current;
             dragRef.current = null;
             const pos = posRef.current;
             posRef.current = null;
             setDragPos(null);
+            if (mode === 'pinch') return;
             if (!drag) {
                 // 빈 곳을 톡 누르면 선택 해제
                 if (Math.hypot(g.dx, g.dy) < 6) setSelectedId(null);
@@ -161,6 +200,9 @@ export function MiniRoomScreen({ navigation }: Props) {
             apply(changed);
         },
         onPanResponderTerminate: () => {
+            modeRef.current = 'pan';
+            live.current.zoomer.pinchEnd();
+            live.current.zoomer.panEnd();
             dragRef.current = null;
             posRef.current = null;
             setDragPos(null);
@@ -239,19 +281,27 @@ export function MiniRoomScreen({ navigation }: Props) {
                     <Text style={styles.backText}>‹</Text>
                 </TouchableOpacity>
                 <Text style={styles.title}>내 방</Text>
-                <Price diamonds={diamonds} rubies={rubies} size={15} showZero />
+                <Price diamonds={0} topaz={topaz} size={15} showZero={false} />
             </View>
 
-            <View style={styles.roomWrap} {...pan.panHandlers}>
-                <MiniRoom
-                    layout={layout}
-                    wall={room.wall}
-                    floor={room.floor}
-                    items={placed}
-                    selectedId={selectedId}
-                    invalid={invalid}
-                    onDrawn={list => { drawnRef.current = list; }}
-                />
+            <View style={styles.roomWrap}>
+                {/* 터치 좌표가 방 그림과 딱 맞도록 방 크기 상자에 터치를 건다 */}
+                <View {...pan.panHandlers}>
+                    <MiniRoom
+                        layout={layout}
+                        wall={room.wall}
+                        floor={room.floor}
+                        items={placed}
+                        selectedId={selectedId}
+                        invalid={invalid}
+                        onDrawn={list => { drawnRef.current = list; }}
+                    />
+                    {zoomer.zoom > 1.01 && (
+                        <TouchableOpacity style={styles.zoomReset} onPress={zoomer.reset}>
+                            <Text style={styles.zoomResetText}>전체 보기</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
 
             {selected && selectedDef ? (
@@ -268,7 +318,7 @@ export function MiniRoomScreen({ navigation }: Props) {
                     </TouchableOpacity>
                 </View>
             ) : (
-                <Text style={styles.hint}>가구를 눌러 고르고, 끌어서 옮겨요</Text>
+                <Text style={styles.hint}>가구를 눌러 고르고 끌어서 옮겨요 · 두 손가락으로 확대</Text>
             )}
 
             <View style={styles.tabs}>
@@ -354,6 +404,20 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     roomWrap: { alignItems: 'center', paddingTop: 6 },
+    zoomReset: {
+        position: 'absolute',
+        top: 6,
+        right: 6,
+        backgroundColor: 'rgba(29,35,48,0.6)',
+        borderRadius: radius.pill,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+    },
+    zoomResetText: {
+        fontFamily: fontFamilies.bodyBold,
+        fontSize: fontSizes.xs,
+        color: '#fff',
+    },
     toolbar: {
         flexDirection: 'row',
         alignItems: 'center',

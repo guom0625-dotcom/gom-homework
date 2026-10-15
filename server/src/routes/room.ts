@@ -13,6 +13,10 @@ const DEFAULT_STYLE = { wall: 'cream', floor: 'wood' };
 
 const BuyBody = z.object({ item_key: z.string().max(50) });
 
+// 다이아 1개 = 토파즈 10개
+export const TOPAZ_PER_DIAMOND = 10;
+const ExchangeBody = z.object({ diamonds: z.number().int().min(1).max(1000) });
+
 const LayoutBody = z.object({
     items: z.array(z.object({
         id: z.string(),
@@ -28,7 +32,7 @@ const StyleBody = z.object({
     floor: z.string().regex(/^[a-z0-9_-]{1,20}$/),
 });
 
-// 미니룸: 가구 구매(다이아·루비 차감 → 창고) / 창고에서 꺼내 배치 / 벽지·바닥
+// 미니룸: 가구 구매(토파즈 차감 → 창고) / 다이아 → 토파즈 교환 / 창고에서 꺼내 배치 / 벽지·바닥
 export function registerRoomRoutes(app: FastifyInstance, db: Db, auth: AuthHandler): void {
     const isLinked = (managerId: string, studentId: string): boolean =>
         !!db.prepare(
@@ -58,36 +62,34 @@ export function registerRoomRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         return roomOf(student_id);
     });
 
-    // POST /room/buy  (student only — 바로 차감하고 창고에 넣는다)
+    // POST /room/buy  (student only — 토파즈를 바로 차감하고 창고에 넣는다)
     app.post('/room/buy', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
         const parsed = BuyBody.safeParse(req.body);
         if (!parsed.success) return reply.code(400).send({ error: 'invalid_body' });
         const key = parsed.data.item_key;
         const price = Object.hasOwn(FURNITURE_PRICES, key) ? FURNITURE_PRICES[key] : undefined;
-        if (!price) return reply.code(404).send({ error: 'item_not_found' });
+        if (price === undefined) return reply.code(404).send({ error: 'item_not_found' });
 
         const result = db.transaction((): string | null => {
-            const balance = db.prepare(
-                'SELECT diamond, ruby FROM gems_balance WHERE student_id = ?'
-            ).get(req.user.id) as { diamond: number; ruby: number } | undefined;
-            if (!balance || balance.diamond < price.cost || balance.ruby < price.ruby) return null;
+            const balance = db.prepare('SELECT topaz FROM gems_balance WHERE student_id = ?')
+                .get(req.user.id) as { topaz: number } | undefined;
+            if (!balance || balance.topaz < price) return null;
 
             const id = ulid();
             const now = Date.now();
-            db.prepare(
-                'UPDATE gems_balance SET diamond = diamond - ?, ruby = ruby - ?, updated_at = ? WHERE student_id = ?'
-            ).run(price.cost, price.ruby, now, req.user.id);
-            const logSpend = db.prepare(`
-                INSERT INTO gem_transactions (id, student_id, gem_type, delta, reason, ref_id, created_at)
-                VALUES (?, ?, ?, ?, 'furniture', ?, ?)
-            `);
-            if (price.cost > 0) logSpend.run(ulid(), req.user.id, GEM_TYPE, -price.cost, id, now);
-            if (price.ruby > 0) logSpend.run(ulid(), req.user.id, 'ruby', -price.ruby, id, now);
+            db.prepare('UPDATE gems_balance SET topaz = topaz - ?, updated_at = ? WHERE student_id = ?')
+                .run(price, now, req.user.id);
+            if (price > 0) {
+                db.prepare(`
+                    INSERT INTO gem_transactions (id, student_id, gem_type, delta, reason, ref_id, created_at)
+                    VALUES (?, ?, 'topaz', ?, 'furniture', ?, ?)
+                `).run(ulid(), req.user.id, -price, id, now);
+            }
             db.prepare(`
-                INSERT INTO room_items (id, student_id, item_key, cost, cost_ruby, bought_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            `).run(id, req.user.id, key, price.cost, price.ruby, now, now);
+                INSERT INTO room_items (id, student_id, item_key, cost_topaz, bought_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `).run(id, req.user.id, key, price, now, now);
             return id;
         })();
         if (!result) return reply.code(409).send({ error: 'insufficient_gems' });
@@ -96,6 +98,38 @@ export function registerRoomRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             'SELECT id, item_key, placed, x, z, rot, bought_at FROM room_items WHERE id = ?'
         ).get(result) as { placed: number };
         return reply.code(201).send({ ...item, placed: item.placed === 1 });
+    });
+
+    // POST /room/exchange  (student only — 다이아 → 토파즈. 반대 방향은 없다)
+    app.post('/room/exchange', { preHandler: auth }, async (req, reply) => {
+        if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
+        const parsed = ExchangeBody.safeParse(req.body);
+        if (!parsed.success) return reply.code(400).send({ error: 'invalid_body' });
+        const { diamonds } = parsed.data;
+        const topaz = diamonds * TOPAZ_PER_DIAMOND;
+
+        const ok = db.transaction((): boolean => {
+            const balance = db.prepare('SELECT diamond FROM gems_balance WHERE student_id = ?')
+                .get(req.user.id) as { diamond: number } | undefined;
+            if (!balance || balance.diamond < diamonds) return false;
+            const now = Date.now();
+            const ref = ulid();
+            db.prepare(
+                'UPDATE gems_balance SET diamond = diamond - ?, topaz = topaz + ?, updated_at = ? WHERE student_id = ?'
+            ).run(diamonds, topaz, now, req.user.id);
+            const log = db.prepare(`
+                INSERT INTO gem_transactions (id, student_id, gem_type, delta, reason, ref_id, created_at)
+                VALUES (?, ?, ?, ?, 'exchange', ?, ?)
+            `);
+            log.run(ulid(), req.user.id, GEM_TYPE, -diamonds, ref, now);
+            log.run(ulid(), req.user.id, 'topaz', topaz, ref, now);
+            return true;
+        })();
+        if (!ok) return reply.code(409).send({ error: 'insufficient_gems' });
+
+        const balance = db.prepare('SELECT diamond, ruby, topaz FROM gems_balance WHERE student_id = ?')
+            .get(req.user.id) as { diamond: number; ruby: number; topaz: number };
+        return { diamonds: balance.diamond, rubies: balance.ruby, topaz: balance.topaz };
     });
 
     // PUT /room/items  (student only — 배치·방향·창고 넣기를 한꺼번에 저장)

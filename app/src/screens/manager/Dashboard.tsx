@@ -122,6 +122,7 @@ export function DashboardScreen({ navigation }: Props) {
                             <Text style={styles.studentName}>{item.name}</Text>
                             <Text style={styles.studentPoints}>
                                 💎 {item.diamonds.toLocaleString()} · ♦️ {item.rubies.toLocaleString()}
+                                {item.topaz != null ? ` · 🔶 ${item.topaz.toLocaleString()}` : ''}
                                 {item.pending_review > 0 ? ` · ⏳ 검토 대기 ${item.pending_review}개` : ''}
                                 {item.pending_books > 0 ? ` · 📚 책 완료 요청 ${item.pending_books}권` : ''}
                             </Text>

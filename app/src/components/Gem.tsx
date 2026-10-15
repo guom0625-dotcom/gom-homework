@@ -4,7 +4,7 @@ import { colors } from '../theme';
 
 interface GemProps {
   size?: number;
-  kind?: 'diamond' | 'ruby';
+  kind?: 'diamond' | 'ruby' | 'topaz';
 }
 
 export function Gem({ size = 24, kind = 'diamond' }: GemProps) {
@@ -12,7 +12,11 @@ export function Gem({ size = 24, kind = 'diamond' }: GemProps) {
   const rawId = React.useId();
   const gradId = React.useMemo(() => `gem${rawId.replace(/:/g, '')}`, [rawId]);
 
-  const [lt, md, dk] = kind === 'ruby' ? colors.ruby : colors.diamond;
+  const [lt, md, dk] = colors[kind];
+  // 토파즈는 육각 컷으로 모양도 다르게
+  const body = kind === 'topaz' ? 'M16 3 L27 10 L27 21 L16 29 L5 21 L5 10 Z' : 'M16 2 L28 12 L16 30 L4 12 Z';
+  const shine = kind === 'topaz' ? 'M16 3 L20 10 L20 21 L16 29 L12 21 L12 10 Z' : 'M16 2 L20 12 L16 30 L12 12 Z';
+  const mid = kind === 'topaz' ? 10 : 12;
 
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32">
@@ -25,7 +29,7 @@ export function Gem({ size = 24, kind = 'diamond' }: GemProps) {
       </Defs>
       {/* 다이아몬드 본체 */}
       <Path
-        d="M16 2 L28 12 L16 30 L4 12 Z"
+        d={body}
         fill={`url(#${gradId})`}
         stroke={dk}
         strokeWidth="1.2"
@@ -33,13 +37,13 @@ export function Gem({ size = 24, kind = 'diamond' }: GemProps) {
       />
       {/* 중앙 세로 하이라이트 */}
       <Path
-        d="M16 2 L20 12 L16 30 L12 12 Z"
+        d={shine}
         fill={md}
         fillOpacity={0.5}
       />
       {/* 가로 구분선 */}
       <Line
-        x1="4" y1="12" x2="28" y2="12"
+        x1={kind === 'topaz' ? 5 : 4} y1={mid} x2={kind === 'topaz' ? 27 : 28} y2={mid}
         stroke={dk}
         strokeWidth="1.2"
         strokeOpacity={0.6}

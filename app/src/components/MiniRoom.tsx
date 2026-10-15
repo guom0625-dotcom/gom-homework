@@ -56,7 +56,7 @@ export function MiniRoom({ layout: l, wall, floor, items, selectedId, invalid, o
     }
 
     return (
-        <View style={{ width: l.width, height: l.height }} pointerEvents="none">
+        <View style={{ width: l.width, height: l.height, overflow: 'hidden' }} pointerEvents="none">
             <Svg width={l.width} height={l.height} style={{ position: 'absolute' }}>
                 {/* 오른쪽 벽 (z = 0), 왼쪽 벽 (x = 0) */}
                 <Polygon points={pts([[0, 0, 0], [S, 0, 0], [S, WALL_H, 0], [0, WALL_H, 0]])} fill={wallColor} />

@@ -10,6 +10,7 @@ import { api } from '../../api/client';
 import { useAppStore } from '../../store/appStore';
 import { Price } from '../../components/Price';
 import { FurnitureThumb } from '../../components/MiniRoom';
+import { TopazExchangeModal } from '../../components/TopazExchangeModal';
 import { FURNITURE, type FurnitureCat, type FurnitureDef } from '../../lib/furnitureData';
 import type { Room, RoomItem } from '../../lib/miniroom';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
@@ -23,13 +24,14 @@ const CATS: [FurnitureCat, string][] = [
     ['kitchen', '주방·욕실'],
 ];
 
-// 가구점: 다이아·루비로 사면 바로 창고로 들어간다
+// 가구점: 토파즈로 사면 바로 창고로 들어간다. 토파즈가 모자라면 다이아를 바꿔서
 export function FurnitureShopScreen({ navigation }: Props) {
     const { width } = useWindowDimensions();
-    const { diamonds, rubies, fetchMe } = useAppStore();
+    const { topaz, fetchMe } = useAppStore();
     const [cat, setCat] = useState<FurnitureCat>('furniture');
     const [owned, setOwned] = useState<RoomItem[]>([]);
     const [buying, setBuying] = useState<string | null>(null);
+    const [exchangeOpen, setExchangeOpen] = useState(false);
 
     const loadOwned = useCallback(() =>
         api<Room>('/room').then(r => setOwned(r.items)).catch(() => {}), []);
@@ -46,17 +48,18 @@ export function FurnitureShopScreen({ navigation }: Props) {
     }, [owned]);
 
     const list = FURNITURE.filter(f => f.cat === cat);
-    const canAfford = (f: FurnitureDef) => diamonds >= f.cost && rubies >= f.ruby;
+    const canAfford = (f: FurnitureDef) => topaz >= f.topaz;
     const cardW = (width - 12 * 2 - 10) / 2;
 
     const buy = (f: FurnitureDef) => {
         if (!canAfford(f)) {
-            Alert.alert('보석이 부족해요', '다이아는 하루 할일을 모두 완료하면, 루비는 책을 다 읽으면 받아요!');
+            Alert.alert('토파즈가 부족해요', '다이아 1개를 토파즈 10개로 바꿀 수 있어요', [
+                { text: '닫기', style: 'cancel' },
+                { text: '바꾸러 가기', onPress: () => setExchangeOpen(true) },
+            ]);
             return;
         }
-        const price = [f.cost > 0 ? `다이아 ${f.cost}개` : '', f.ruby > 0 ? `루비 ${f.ruby}개` : '']
-            .filter(Boolean).join(' + ');
-        Alert.alert(`${f.name} 구매`, `${price}로 살까요?`, [
+        Alert.alert(`${f.name} 구매`, `토파즈 ${f.topaz}개로 살까요?`, [
             { text: '취소', style: 'cancel' },
             {
                 text: '구매',
@@ -72,7 +75,7 @@ export function FurnitureShopScreen({ navigation }: Props) {
                         Alert.alert('구매 완료! 🎉', `${f.name}을(를) 창고에 넣었어요.\n내 방에서 꺼내서 꾸며봐요`);
                     } catch (e: unknown) {
                         const msg = e instanceof Error ? e.message : '';
-                        Alert.alert('오류', msg === 'insufficient_gems' ? '보석이 부족해요' : '구매하지 못했어요');
+                        Alert.alert('오류', msg === 'insufficient_gems' ? '토파즈가 부족해요' : '구매하지 못했어요');
                         fetchMe().catch(() => {});
                     } finally {
                         setBuying(null);
@@ -89,8 +92,17 @@ export function FurnitureShopScreen({ navigation }: Props) {
                     <Text style={styles.backText}>‹</Text>
                 </TouchableOpacity>
                 <Text style={styles.title}>가구점</Text>
-                <Price diamonds={diamonds} rubies={rubies} size={15} showZero />
+                <View style={{ width: 36 }} />
             </View>
+
+            <View style={styles.wallet}>
+                <Price diamonds={0} topaz={topaz} size={16} showZero={false} />
+                {topaz === 0 && <Text style={styles.walletZero}>토파즈 0개</Text>}
+                <TouchableOpacity style={styles.exchangeBtn} onPress={() => setExchangeOpen(true)}>
+                    <Text style={styles.exchangeText}>💎 → 토파즈 바꾸기</Text>
+                </TouchableOpacity>
+            </View>
+            <TopazExchangeModal visible={exchangeOpen} onClose={() => setExchangeOpen(false)} />
 
             <View style={styles.tabs}>
                 {CATS.map(([key, label]) => (
@@ -120,7 +132,7 @@ export function FurnitureShopScreen({ navigation }: Props) {
                             <FurnitureThumb itemKey={f.key} size={cardW - 40} />
                             <Text style={styles.name} numberOfLines={1}>{f.name}</Text>
                             <View style={styles.cardBottom}>
-                                <Price diamonds={f.cost} rubies={f.ruby} size={13} />
+                                <Price diamonds={0} topaz={f.topaz} size={13} />
                                 {count > 0 && <Text style={styles.owned}>보유 {count}</Text>}
                             </View>
                         </TouchableOpacity>
@@ -150,6 +162,31 @@ const styles = StyleSheet.create({
         fontSize: fontSizes['3xl'],
         color: colors.ink[900],
         textAlign: 'center',
+    },
+    wallet: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        backgroundColor: '#fffaeb',
+    },
+    walletZero: {
+        fontFamily: fontFamilies.bodyMed,
+        fontSize: fontSizes.sm,
+        color: colors.ink[500],
+    },
+    exchangeBtn: {
+        marginLeft: 'auto',
+        backgroundColor: colors.sun[300],
+        borderRadius: radius.pill,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+    },
+    exchangeText: {
+        fontFamily: fontFamilies.bodyBold,
+        fontSize: fontSizes.sm,
+        color: colors.ink[900],
     },
     tabs: {
         flexDirection: 'row',

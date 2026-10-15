@@ -1,5 +1,7 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, useWindowDimensions } from 'react-native';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import {
+    View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, PanResponder, useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -8,18 +10,52 @@ import type { ManagerStackParams } from '../../navigation/RootNavigator';
 import { api } from '../../api/client';
 import { MiniRoom } from '../../components/MiniRoom';
 import { makeLayout, type Room } from '../../lib/miniroom';
-import { colors, fontFamilies, fontSizes } from '../../theme';
+import { useRoomZoom } from '../../hooks/useRoomZoom';
+import { colors, fontFamilies, fontSizes, radius } from '../../theme';
 
 type Props = {
     navigation: NativeStackNavigationProp<ManagerStackParams, 'RoomVisit'>;
     route: RouteProp<ManagerStackParams, 'RoomVisit'>;
 };
 
-// 학생이 꾸민 방 구경 (보기만)
+// 학생이 꾸민 방 구경 (보기만 — 두 손가락 확대, 확대하면 끌어서 이동)
 export function RoomVisitScreen({ navigation, route }: Props) {
     const { studentId, studentName } = route.params;
     const { width } = useWindowDimensions();
-    const layout = useMemo(() => makeLayout(width - 16), [width]);
+    const base = useMemo(() => makeLayout(width - 16), [width]);
+    const zoomer = useRoomZoom(base);
+    const zmRef = useRef(zoomer);
+    zmRef.current = zoomer;
+    const pinchingRef = useRef(false);
+    const pan = useMemo(() => PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: (e) => {
+            zmRef.current.setOffsetFrom(e);
+            pinchingRef.current = e.nativeEvent.touches.length >= 2;
+            if (pinchingRef.current) zmRef.current.pinchMove(e);
+            else zmRef.current.panBegin();
+        },
+        onPanResponderMove: (e, g) => {
+            if (e.nativeEvent.touches.length >= 2) {
+                if (!pinchingRef.current) { pinchingRef.current = true; zmRef.current.panEnd(); }
+                zmRef.current.pinchMove(e);
+            } else if (!pinchingRef.current) {
+                zmRef.current.panMove(g.dx, g.dy);
+            }
+        },
+        onPanResponderRelease: () => {
+            pinchingRef.current = false;
+            zmRef.current.pinchEnd();
+            zmRef.current.panEnd();
+        },
+        onPanResponderTerminate: () => {
+            pinchingRef.current = false;
+            zmRef.current.pinchEnd();
+            zmRef.current.panEnd();
+        },
+    }), []);
     const [room, setRoom] = useState<Room | null>(null);
     const [error, setError] = useState(false);
 
@@ -49,7 +85,14 @@ export function RoomVisitScreen({ navigation, route }: Props) {
                 </View>
             ) : (
                 <View style={styles.body}>
-                    <MiniRoom layout={layout} wall={room.wall} floor={room.floor} items={placed} />
+                    <View {...pan.panHandlers}>
+                        <MiniRoom layout={zoomer.layout} wall={room.wall} floor={room.floor} items={placed} />
+                        {zoomer.zoom > 1.01 && (
+                            <TouchableOpacity style={styles.zoomReset} onPress={zoomer.reset}>
+                                <Text style={styles.zoomResetText}>전체 보기</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
                     <Text style={styles.info}>
                         {room.items.length === 0
                             ? '아직 가구가 없어요'
@@ -83,6 +126,20 @@ const styles = StyleSheet.create({
     },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     body: { alignItems: 'center', paddingTop: 12, gap: 14 },
+    zoomReset: {
+        position: 'absolute',
+        top: 6,
+        right: 6,
+        backgroundColor: 'rgba(29,35,48,0.6)',
+        borderRadius: radius.pill,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+    },
+    zoomResetText: {
+        fontFamily: fontFamilies.bodyBold,
+        fontSize: fontSizes.xs,
+        color: '#fff',
+    },
     info: {
         fontFamily: fontFamilies.body,
         fontSize: fontSizes.sm,

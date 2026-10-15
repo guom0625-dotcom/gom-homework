@@ -5,7 +5,7 @@
 import { FURNITURE_BY_KEY, FURNITURE_CELL as CELL, type FurnitureDef } from './furnitureData';
 
 export const ROOM_SIZE = 20;
-export const WALL_H = 1.0;          // 벽 높이 (모델 단위)
+export const WALL_H = 1.6;          // 벽 높이 (모델 단위) — 큰 책장(0.9)·2층 침대보다 넉넉히
 const C = Math.SQRT1_2;
 const SPAN = ROOM_SIZE * CELL;      // 방 한 변 (모델 단위)
 
@@ -57,6 +57,18 @@ export function makeLayout(width: number): Layout {
     const pad = 6;
     const k = (width - pad * 2) / (2 * SPAN * C);
     return { k, width, height: (SPAN + WALL_H * C) * k + pad * 2, ox: width / 2, oy: WALL_H * C * k + pad };
+}
+
+// 확대/이동한 화면 — 보이는 창(width x height)은 그대로, 방만 zoom 배 키워서 (px, py) 만큼 옮긴다
+export const MAX_ZOOM = 3;
+export function zoomLayout(base: Layout, zoom: number, px: number, py: number): Layout {
+    return { ...base, k: base.k * zoom, ox: base.ox * zoom + px, oy: base.oy * zoom + py };
+}
+
+// 방이 창 밖으로 빠져서 빈 곳이 보이지 않게 이동량을 제한
+export function clampPan(base: Layout, zoom: number, px: number, py: number): [number, number] {
+    const minX = base.width - base.width * zoom, minY = base.height - base.height * zoom;
+    return [Math.min(0, Math.max(minX, px)), Math.min(0, Math.max(minY, py))];
 }
 
 // 모델 좌표 (X, Y, Z) → 화면 좌표

@@ -15,6 +15,7 @@ export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHa
             SELECT u.id, u.name, u.character, u.avatar, u.created_at,
                    COALESCE(gb.diamond, 0) AS diamonds,
                    COALESCE(gb.ruby, 0) AS rubies,
+                   COALESCE(gb.topaz, 0) AS topaz,
                    (SELECT COUNT(*) FROM books b WHERE b.student_id = u.id AND b.status = 'done_requested') AS pending_books,
                    (SELECT COUNT(*) FROM tasks t WHERE t.student_id = u.id AND t.day = ?) AS today_total,
                    (SELECT COUNT(*) FROM tasks t WHERE t.student_id = u.id

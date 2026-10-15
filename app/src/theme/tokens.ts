@@ -38,6 +38,8 @@ export const colors = {
   diamond: ['#dff4ff', '#5cc4ff', '#1f86d6'],
   // 루비 — 책 한 권을 다 읽으면 받는 보석
   ruby:    ['#ffd9e1', '#ff5a7a', '#c4304f'],
+  // 토파즈 — 미니룸 가구를 사는 보석 (다이아 1 = 토파즈 10)
+  topaz:   ['#fff1c7', '#ffb21f', '#cf7f06'],
   paper:  '#fffaf2',
   paper2: '#fdf3df',
   card:   '#ffffff',
