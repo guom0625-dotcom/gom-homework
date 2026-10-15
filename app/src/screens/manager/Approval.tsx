@@ -8,7 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { ManagerStackParams } from '../../navigation/RootNavigator';
-import { useAppStore, type Task } from '../../store/appStore';
+import { useAppStore, isDayOpen, type Task } from '../../store/appStore';
 import { addDays, formatDay, todayKST } from '../../lib/days';
 import { PraiseModal } from '../../components/PraiseModal';
 import { colors, fontFamilies, fontSizes, radius, shadows } from '../../theme';
@@ -33,7 +33,7 @@ export function ApprovalScreen({ navigation, route }: Props) {
     const { studentId, studentName } = route.params;
     const {
         selectedStudentTasks, fetchStudentTasks, approveTask, rejectTask, approvePlan, rejectPlan,
-        approveDelete, rejectDelete, selectedOlderDay,
+        approveDelete, rejectDelete, selectedOlderDay, completeDeadlineMin,
     } = useAppStore();
     // 최근 1주일치만 보여주고, 아래 "더 보기"로 1주일씩 넓힌다 (검토 대기 중인 할일은 날짜와 무관하게 항상 표시)
     const [from, setFrom] = useState(() => addDays(todayKST(), -6));
@@ -230,7 +230,10 @@ export function ApprovalScreen({ navigation, route }: Props) {
                                             ? `검토 대기 ${group.pendingCount}개`
                                             : group.allDone
                                                 ? `✅ 완료 ${group.tasks.length}개`
-                                                : `진행중 · ${group.tasks.length}개`}
+                                                // 완료 마감이 지난 날은 더 진행할 수 없으니 결과로 보여준다
+                                                : isDayOpen(group.day, completeDeadlineMin)
+                                                    ? `진행중 · ${group.tasks.length}개`
+                                                    : `마감 · ${group.tasks.filter(t => t.status === 'approved').length}/${group.tasks.length}개 완료`}
                                     </Text>
                                 </View>
                                 <Text style={[styles.chevron, expanded && styles.chevronUp]}>›</Text>
