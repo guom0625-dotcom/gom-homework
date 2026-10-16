@@ -20,7 +20,7 @@
       "package": "com.guom0625.gomhomework",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#fffaf2"
+        "backgroundColor": "#0b0805"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
