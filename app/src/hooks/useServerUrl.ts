@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { markApiBaseReady, setApiBase } from '../api/client';
 
@@ -27,7 +28,7 @@ async function resolveUrl(isWifi: boolean): Promise<string> {
     return isWifi && await internalReachable() ? INTERNAL_URL : EXTERNAL_URL;
 }
 
-/** 네트워크가 바뀔 때마다 서버 주소(내부/외부)를 다시 고른다. 첫 판정이 끝나야 API 요청이 나간다. */
+/** 네트워크가 바뀌거나 앱이 다시 앞으로 나올 때마다 서버 주소(내부/외부)를 다시 고른다. 첫 판정이 끝나야 API 요청이 나간다. */
 export function useServerUrl() {
     useEffect(() => {
         let seq = 0;
@@ -41,6 +42,10 @@ export function useServerUrl() {
 
         NetInfo.fetch().then(state => apply(state.type === 'wifi')).catch(() => markApiBaseReady());
         const unsub = NetInfo.addEventListener(state => { apply(state.type === 'wifi'); });
-        return unsub;
+        // 앱이 뒤에 있는 동안 망이 바뀌면 이벤트를 놓칠 수 있어, 앞으로 나올 때도 다시 고른다
+        const sub = AppState.addEventListener('change', next => {
+            if (next === 'active') NetInfo.fetch().then(state => apply(state.type === 'wifi')).catch(() => {});
+        });
+        return () => { unsub(); sub.remove(); };
     }, []);
 }

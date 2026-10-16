@@ -29,7 +29,18 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (_key) headers['Authorization'] = `Bearer ${_key}`;
 
     await _baseReady;
-    const res = await fetch(`${_base}${path}`, { ...init, headers });
+    const base = _base;
+    let res: Response;
+    try {
+        res = await fetch(`${base}${path}`, { ...init, headers });
+    } catch (e) {
+        // 집 WiFi(내부 주소)에서 다른 망으로 옮긴 직후엔 내부 주소가 안 닿는다 → 외부 주소로 바꾼다.
+        // 조회(GET)만 바로 다시 보낸다 — 쓰기 요청은 서버에 이미 닿았을 수도 있어 중복을 피한다.
+        if (base === DEFAULT_BASE) throw e;
+        if (_base === base) _base = DEFAULT_BASE;
+        if ((init.method ?? 'GET').toUpperCase() !== 'GET') throw e;
+        res = await fetch(`${_base}${path}`, { ...init, headers });
+    }
     if (!res.ok) {
         const body = await res.json().catch(() => ({ error: res.statusText }));
         throw new ApiError(res.status, body, (body as { error?: string }).error ?? 'request_failed');
