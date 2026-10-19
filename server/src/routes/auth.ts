@@ -25,6 +25,12 @@ const RECOVER_WINDOW_MS = 10 * 60_000;
 const RECOVER_MAX_FAILURES = 20;
 let recoverFailures: number[] = [];
 
+// 펫 앱 연결 코드 — 딥링크로만 전달되므로 사람이 입력할 6자리 대신 추측할 수 없는 긴 난수를 쓴다
+const LINK_CODE_TTL_MS = 60_000;
+const LinkBody = z.object({
+    code: z.string().regex(/^[0-9a-f]{32}$/),
+});
+
 export function registerAuthRoutes(app: FastifyInstance, db: Db, auth: AuthHandler): void {
     // POST /auth/signup
     app.post('/auth/signup', async (req, reply) => {
@@ -98,6 +104,59 @@ export function registerAuthRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
                 'UPDATE auth_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL'
             ).run(now, user.id);
             db.prepare('DELETE FROM push_tokens WHERE user_id = ?').run(user.id);
+            const key = makeKey();
+            db.prepare(
+                'INSERT INTO auth_keys (key_hash, user_id, created_at) VALUES (?, ?, ?)'
+            ).run(hashKey(key), user.id, now);
+            return { ...user, key };
+        })();
+
+        if (!result) {
+            recoverFailures.push(now);
+            return reply.code(400).send({ error: 'invalid_or_expired_code' });
+        }
+        return result;
+    });
+
+    // POST /auth/link-code  (student only — 펫 앱으로 계정을 넘길 1회용 코드)
+    app.post('/auth/link-code', { preHandler: auth }, async (req, reply) => {
+        if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
+        const now = Date.now();
+        const code = randomBytes(16).toString('hex');
+        db.transaction(() => {
+            db.prepare('DELETE FROM link_codes WHERE student_id = ? OR expires_at < ?').run(req.user.id, now);
+            db.prepare(
+                'INSERT INTO link_codes (code_hash, student_id, expires_at) VALUES (?, ?, ?)'
+            ).run(hashKey(code), req.user.id, now + LINK_CODE_TTL_MS);
+        })();
+        return { code, expires_in_seconds: LINK_CODE_TTL_MS / 1000 };
+    });
+
+    // POST /auth/link  (로그인 전 — 펫 앱이 연결 코드로 같은 학생 계정의 새 키를 받는다)
+    // /auth/recover 와 달리 숙제앱 키는 그대로 둔다
+    app.post('/auth/link', async (req, reply) => {
+        const now = Date.now();
+        recoverFailures = recoverFailures.filter((t) => now - t < RECOVER_WINDOW_MS);
+        if (recoverFailures.length >= RECOVER_MAX_FAILURES) {
+            return reply.code(429).send({ error: 'too_many_attempts' });
+        }
+
+        const body = LinkBody.safeParse(req.body);
+        if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
+
+        const result = db.transaction(() => {
+            const codeHash = hashKey(body.data.code);
+            const row = db.prepare(
+                'SELECT student_id FROM link_codes WHERE code_hash = ? AND expires_at > ? AND used_at IS NULL'
+            ).get(codeHash, now) as { student_id: string } | undefined;
+            if (!row) return null;
+            db.prepare('UPDATE link_codes SET used_at = ? WHERE code_hash = ?').run(now, codeHash);
+
+            const user = db.prepare(
+                "SELECT id, name, role FROM users WHERE id = ? AND role = 'student' AND revoked_at IS NULL"
+            ).get(row.student_id) as { id: string; name: string; role: string } | undefined;
+            if (!user) return null;
+
             const key = makeKey();
             db.prepare(
                 'INSERT INTO auth_keys (key_hash, user_id, created_at) VALUES (?, ?, ?)'
