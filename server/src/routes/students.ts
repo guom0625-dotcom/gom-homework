@@ -73,7 +73,7 @@ export function registerStudentRoutes(app: FastifyInstance, db: Db, auth: AuthHa
             const others = db.prepare('SELECT 1 FROM manager_student_link WHERE student_id = ?').get(id);
             if (others) return false;
 
-            for (const table of ['tasks', 'books', 'owned_rewards', 'gem_transactions', 'gems_balance', 'auto_reward_rules', 'pairing_codes', 'room_items', 'room_style', 'owned_wear', 'link_codes']) {
+            for (const table of ['tasks', 'books', 'owned_rewards', 'gem_transactions', 'gems_balance', 'auto_reward_rules', 'pairing_codes', 'room_items', 'room_style', 'owned_wear', 'link_codes', 'pets']) {
                 db.prepare(`DELETE FROM ${table} WHERE student_id = ?`).run(id);
             }
             db.prepare('DELETE FROM auth_keys WHERE user_id = ?').run(id);

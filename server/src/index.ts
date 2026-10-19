@@ -18,6 +18,7 @@ import { registerSettingsRoutes } from './routes/settings.ts';
 import { registerBookRoutes } from './routes/books.ts';
 import { registerReportRoutes, sendWeeklyReports } from './routes/report.ts';
 import { registerRoomRoutes } from './routes/room.ts';
+import { registerPetRoutes } from './routes/pet.ts';
 import { DAY_REWARD, settlePastDays } from './lib/gems.ts';
 import { todayKST } from './lib/days.ts';
 import { sendPushToUser } from './lib/push.ts';
@@ -82,6 +83,7 @@ registerSettingsRoutes(app, db, auth);
 registerBookRoutes(app, db, auth);
 registerReportRoutes(app, db, auth);
 registerRoomRoutes(app, db, auth);
+registerPetRoutes(app, db, auth);
 
 // app: 앱이 집 WiFi에서 내부 주소가 진짜 이 서버인지 확인하는 데 쓴다
 app.get('/health', async () => ({ ok: true, app: 'gom-homework', time: Date.now() }));
