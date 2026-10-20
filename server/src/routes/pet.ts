@@ -56,8 +56,8 @@ const HATCHABLE = ['bear'];
 type Cond = 'feed' | 'pat' | 'clean' | 'room';
 // 다음 단계로 가는 조건. feed·pat·clean 은 지금 단계의 누적 일수, room 은 방 크기
 const GROWTH: Record<Exclude<Stage, 'adult'>, { next: Stage; need: Partial<Record<Cond, number>> }> = {
-    // 알 7일 + 유아 45일 + 청소년 80일 = 약 4달 반 (2026-10-20 사용자 결정)
-    egg: { next: 'baby', need: { pat: 7 } },
+    // 알 3일 + 유아 45일 + 청소년 80일 = 약 4달 반 (2026-10-20 사용자 결정)
+    egg: { next: 'baby', need: { pat: 3 } },
     baby: { next: 'teen', need: { feed: 45, pat: 45, clean: 45, room: 1 } },
     teen: { next: 'adult', need: { feed: 80, pat: 80, clean: 80, room: 2 } },
 };
