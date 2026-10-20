@@ -104,6 +104,13 @@ const CleanBody = z.object({ id: z.string().max(40).optional() }).optional();
 const ItemBody = z.object({ item: z.string().max(30) });
 const PlaceBody = z.object({ item: z.string().max(30), placed: z.boolean() });
 const TestBody = z.object({ action: z.string().max(30) });
+// 방 꾸미기: 옮길 수 있는 물건 (쿠션·밥그릇은 창고에 넣을 수 없지만 옮길 수는 있다). 커튼은 창문에 붙어 있어 빠진다
+const MOVABLE = new Set(['cushion', 'bowl', ...Object.keys(TOYS), ...Object.keys(GADGETS), 'rug', 'plant']);
+const LayoutBody = z.object({
+    layout: z.record(z.string().max(20), z.object({
+        x: z.number().min(0).max(40), z: z.number().min(0).max(40), rot: z.number().int().min(0).max(3),
+    })),
+});
 const WearBody = z.object({ slot: z.enum(['top', 'hat']), item: z.string().max(30).nullable() });
 const DecorBody = z.object({ wallpaper: z.string().max(30).nullable().optional(), cushion: z.string().max(30).nullable().optional() });
 
@@ -133,9 +140,9 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
     const roomLevel = (studentId: string) =>
         (db.prepare('SELECT room_level FROM pet_home WHERE student_id = ?').get(studentId) as { room_level: number } | undefined)?.room_level ?? 0;
     const home = (studentId: string) =>
-        (db.prepare('SELECT room_level, wallpaper, cushion FROM pet_home WHERE student_id = ?').get(studentId) as
-            { room_level: number; wallpaper: string | null; cushion: string | null } | undefined)
-        ?? { room_level: 0, wallpaper: null, cushion: null };
+        (db.prepare('SELECT room_level, wallpaper, cushion, layout FROM pet_home WHERE student_id = ?').get(studentId) as
+            { room_level: number; wallpaper: string | null; cushion: string | null; layout: string | null } | undefined)
+        ?? { room_level: 0, wallpaper: null, cushion: null, layout: null };
     const ensureHome = (studentId: string) => db.prepare(`
         INSERT INTO pet_home (student_id, room_level, updated_at) VALUES (?, 0, ?) ON CONFLICT (student_id) DO NOTHING
     `).run(studentId, Date.now());
@@ -395,6 +402,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
             },
             items: itemList(p.student_id),
             decor: { wallpaper: h.wallpaper, cushion: h.cushion },
+            // 물건 자리와 방향. 없는 물건은 앱의 기본 자리
+            layout: h.layout ? JSON.parse(h.layout) as Record<string, { x: number; z: number; rot: number }> : {},
             shop: {
                 snacks: SNACKS, toys: TOYS, decor: DECOR, gadgets: GADGETS, ...PRICES, feed: FEED_PRICE,
                 // 지금 크기의 옷값 (알이면 유아 크기 값을 보여 주기만 한다)
@@ -599,6 +608,15 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         ensureHome(studentId);
         if (body.wallpaper !== undefined) db.prepare('UPDATE pet_home SET wallpaper = ?, updated_at = ? WHERE student_id = ?').run(body.wallpaper, now, studentId);
         if (body.cushion !== undefined) db.prepare('UPDATE pet_home SET cushion = ?, updated_at = ? WHERE student_id = ?').run(body.cushion, now, studentId);
+        return 'ok';
+    }, { allowEgg: true, allowGone: true });
+
+    // 방 꾸미기 저장 {layout: {key: {x, z, rot}}} — 겹치는지는 앱이 본다. 여기선 키와 범위만
+    action('/pet/layout', LayoutBody, (_p, body, { now, studentId }) => {
+        const keys = Object.keys(body.layout);
+        if (keys.length > 20 || keys.some(k => !MOVABLE.has(k))) return 'unknown_item';
+        ensureHome(studentId);
+        db.prepare('UPDATE pet_home SET layout = ?, updated_at = ? WHERE student_id = ?').run(JSON.stringify(body.layout), now, studentId);
         return 'ok';
     }, { allowEgg: true, allowGone: true });
 
