@@ -8,7 +8,8 @@ import type { AuthHandler } from '../index.ts';
 // - 밥: 하루 1번 토파즈 3개. 먹고 3시간·8시간 뒤에 똥이 하나씩 나온다
 // - 쓰다듬기(알이면 품어주기): 하루 1번, 무료
 // - 청소: 무료. 그날 똥을 하나라도 치우면 '청소한 날'
-// - 성장: 단계마다 조건(연속 일수·방 크기)을 모두 채우면 아이가 성장 버튼을 누른다
+// - 성장: 단계마다 조건(누적 일수·방 크기)을 모두 채우면 아이가 성장 버튼을 누른다.
+//   누적 일수는 빠진 날 이틀마다 하루씩 깎인다 (2026-10-20 사용자 결정)
 export const FEED_PRICE = 3;
 const FULL = 3;                          // 배부름 칸 수. 밥을 주면 가득, 하루마다 1칸씩 준다
 const POOP_AFTER_H = [3, 8];
@@ -77,23 +78,26 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         `).run(p.id, p.student_id, day);
     };
 
-    // 지금 단계에서 오늘(아직 안 했으면 어제)부터 거꾸로 이어진 날 수
-    const streak = (p: PetRow, field: 'fed' | 'patted' | 'cleaned', today: string) => {
-        const done = new Set((db.prepare(`SELECT day FROM pet_days WHERE pet_id = ? AND day >= ? AND ${field} = 1`)
-            .all(p.id, p.stage_day) as { day: string }[]).map(r => r.day));
-        let d = done.has(today) ? today : prevDay(today);
-        let n = 0;
-        while (done.has(d)) { n++; d = prevDay(d); }
-        return n;
+    // 지금 단계에서 한 날 수 - 빠진 날 / 2 (내림). 오늘은 아직 안 했어도 빠진 날로 치지 않는다
+    const progress = (p: PetRow, field: 'fed' | 'patted' | 'cleaned', today: string) => {
+        const done = (db.prepare(`SELECT COUNT(*) AS n FROM pet_days WHERE pet_id = ? AND day >= ? AND day <= ? AND ${field} = 1`)
+            .get(p.id, p.stage_day, today) as { n: number }).n;
+        const doneToday = !!db.prepare(`SELECT 1 FROM pet_days WHERE pet_id = ? AND day = ? AND ${field} = 1`).get(p.id, today);
+        const pastDays = Math.max(0, daysBetween(p.stage_day, today));          // 단계 시작일 ~ 어제
+        const missed = Math.max(0, pastDays - (done - (doneToday ? 1 : 0)));
+        return { have: Math.max(0, done - Math.floor(missed / 2)), missed };
     };
 
     const growth = (p: PetRow, today: string, room: number) => {
         if (p.stage === 'adult') return { next: null, ready: false, conds: [] };
         const g = GROWTH[p.stage];
-        const have: Record<Cond, number> = {
-            feed: streak(p, 'fed', today), pat: streak(p, 'patted', today), clean: streak(p, 'cleaned', today), room,
+        const prog: Record<Cond, { have: number; missed: number }> = {
+            feed: progress(p, 'fed', today), pat: progress(p, 'patted', today), clean: progress(p, 'cleaned', today),
+            room: { have: room, missed: 0 },
         };
-        const conds = (Object.keys(g.need) as Cond[]).map(key => ({ key, have: Math.min(have[key], g.need[key]!), need: g.need[key]! }));
+        const conds = (Object.keys(g.need) as Cond[]).map(key => ({
+            key, have: Math.min(prog[key].have, g.need[key]!), need: g.need[key]!, missed: prog[key].missed,
+        }));
         return { next: g.next, ready: conds.every(c => c.have >= c.need), conds };
     };
 
