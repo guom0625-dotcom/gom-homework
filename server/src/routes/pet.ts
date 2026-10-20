@@ -38,6 +38,16 @@ const DECOR: Record<string, number> = {
     cushion_blue: 10,                              // 쿠션 색
 };
 const HELPER_EVERY_DAYS = 7;
+// 능력이 있는 물건 — 방에 꺼내 놓았을 때만 작동한다 (2026-10-20 사용자 결정)
+//  robot 자동 청소기: 똥이 나오고 12시간이 지나면 하루 1번 치운다 ('청소한 날'로는 세지 않는다)
+//  feeder 자동 급식기: 밥을 안 준 날 밤 9시에 밥을 준다 (🔶3 나감, '밥 준 날'로는 세지 않는다)
+//  firstaid 구급상자: 중병이 되기까지 1일 → 2일
+//  bed 포근한 침대: 아파서 떠나기까지 3일 → 4일
+const GADGETS: Record<string, number> = { robot: 80, feeder: 100, firstaid: 50, bed: 60 };
+/** 방 크기별로 꺼내 놓을 수 있는 물건 수 (벽지·쿠션 색은 세지 않는다) */
+const SLOTS = [2, 4, 6];
+const PLACEABLE = new Set([...Object.keys(TOYS), ...Object.keys(GADGETS), 'rug', 'plant', 'curtain']);
+const itemPrice = (key: string): number | undefined => TOYS[key] ?? DECOR[key] ?? GADGETS[key];
 
 type Stage = 'egg' | 'baby' | 'teen' | 'adult';
 // 펫 종류 6가지: bear 곰, dog 강아지, cat 고양이, rabbit 토끼, squirrel 다람쥐, hamster 햄스터.
@@ -56,9 +66,9 @@ interface PetRow {
     id: string; student_id: string; species: string; name: string | null; status: string;
     stage: Stage; stage_day: string; fed_days: number; last_fed_day: string | null; created_at: number;
     sick_since: number | null; med_given: number; hospital_visits: number; happy_until: number | null;
-    helper_day: string | null; gone_at: number | null; gone_reason: string | null;
+    helper_day: string | null; gone_at: number | null; gone_reason: string | null; robot_day: string | null;
 }
-interface DayRow { fed: number; patted: number; cleaned: number; snacks: number; hospital: number }
+interface DayRow { fed: number; patted: number; cleaned: number; snacks: number; hospital: number; auto_fed: number }
 
 /** 한국 날짜 'YYYY-MM-DD' */
 export const kstDay = (ms = Date.now()) => new Date(ms + 9 * H).toISOString().slice(0, 10);
@@ -72,6 +82,7 @@ const NameBody = z.object({ name: z.string().trim().min(1).max(8) });
 const GrowBody = z.object({ name: z.string().trim().min(1).max(8).optional() }).optional();
 const CleanBody = z.object({ id: z.string().max(40).optional() }).optional();
 const ItemBody = z.object({ item: z.string().max(30) });
+const PlaceBody = z.object({ item: z.string().max(30), placed: z.boolean() });
 const TestBody = z.object({ action: z.string().max(30) });
 const DecorBody = z.object({ wallpaper: z.string().max(30).nullable().optional(), cushion: z.string().max(30).nullable().optional() });
 
@@ -109,6 +120,16 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
     `).run(studentId, Date.now());
     const owned = (studentId: string) =>
         (db.prepare('SELECT item_key FROM pet_items WHERE student_id = ? ORDER BY created_at').all(studentId) as { item_key: string }[]).map(r => r.item_key);
+    const itemList = (studentId: string) =>
+        (db.prepare('SELECT item_key AS key, placed FROM pet_items WHERE student_id = ? ORDER BY created_at').all(studentId) as { key: string; placed: number }[])
+            .map(r => ({ key: r.key, placed: r.placed === 1 }));
+    const isPlaced = (studentId: string, key: string) =>
+        !!db.prepare('SELECT 1 FROM pet_items WHERE student_id = ? AND item_key = ? AND placed = 1').get(studentId, key);
+    /** 방에 꺼내 둔 시각 (없으면 null) */
+    const placedAt = (studentId: string, key: string) =>
+        (db.prepare('SELECT placed_at FROM pet_items WHERE student_id = ? AND item_key = ? AND placed = 1').get(studentId, key) as { placed_at: number | null } | undefined)?.placed_at ?? null;
+    const placedCount = (studentId: string) =>
+        (db.prepare('SELECT COUNT(*) AS n FROM pet_items WHERE student_id = ? AND placed = 1').get(studentId) as { n: number }).n;
 
     const balance = (studentId: string) => {
         const b = db.prepare('SELECT diamond, topaz FROM gems_balance WHERE student_id = ?').get(studentId) as { diamond: number; topaz: number } | undefined;
@@ -127,7 +148,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
     };
 
     const dayRow = (p: PetRow, day: string) =>
-        db.prepare('SELECT fed, patted, cleaned, snacks, hospital FROM pet_days WHERE pet_id = ? AND day = ?').get(p.id, day) as DayRow | undefined;
+        db.prepare('SELECT fed, patted, cleaned, snacks, hospital, auto_fed FROM pet_days WHERE pet_id = ? AND day = ?').get(p.id, day) as DayRow | undefined;
 
     const markDay = (p: PetRow, field: 'fed' | 'patted' | 'cleaned' | 'hospital', day: string) => {
         db.prepare(`
@@ -146,16 +167,62 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         return r.at === null ? Infinity : r.at + DAY;
     };
     const causes = (p: PetRow, now: number) => ({ hunger: hungerSickAt(p) <= now, poop: poopSickAt(p) <= now });
-    const severeAt = (p: PetRow) => (p.sick_since ?? Infinity) + DAY;
+    const severeAt = (p: PetRow) => (p.sick_since ?? Infinity) + (isPlaced(p.student_id, 'firstaid') ? 2 : 1) * DAY;
     const hospitalDays = (p: PetRow) => p.sick_since === null ? 0 :
         (db.prepare('SELECT COUNT(*) AS n FROM pet_days WHERE pet_id = ? AND day >= ? AND hospital = 1').get(p.id, kstDay(p.sick_since)) as { n: number }).n;
     /** 아파서 떠나는 시각: 아픈 지 3일. 병원에 간 날은 하루씩 미룬다 */
-    const sickLeaveAt = (p: PetRow) => (p.sick_since ?? Infinity) + 3 * DAY + hospitalDays(p) * DAY;
+    const sickLeaveAt = (p: PetRow) => (p.sick_since ?? Infinity) + ((isPlaced(p.student_id, 'bed') ? 4 : 3) + hospitalDays(p)) * DAY;
+
+    const addPoops = (p: PetRow, fedAt: number) => {
+        for (const h of POOP_AFTER_H) {
+            db.prepare('INSERT INTO pet_poops (id, pet_id, student_id, at, u, v) VALUES (?, ?, ?, ?, ?, ?)')
+                .run(ulid(), p.id, p.student_id, fedAt + h * H, Math.random(), Math.random());
+        }
+    };
+
+    // 자동 급식기: 밥을 안 준 날 밤 9시에 (밀린 날도 차례로)
+    const runFeeder = (p: PetRow, now: number) => {
+        const since = placedAt(p.student_id, 'feeder');
+        if (since === null) return;
+        let d = p.last_fed_day ? addDays(p.last_fed_day, 1) : p.stage_day;
+        for (let i = 0; i < 8; i++, d = addDays(d, 1)) {
+            const at = dayStart(d) + 21 * H;
+            if (at > now) break;
+            if (at < since) continue;          // 꺼내 놓기 전 날은 못 챙긴다
+            if (!spendTopaz(p.student_id, FEED_PRICE, 'pet_feeder', p.id)) break;
+            db.prepare('UPDATE pets SET last_fed_day = ?, last_fed_at = ? WHERE id = ?').run(d, at, p.id);
+            db.prepare(`INSERT INTO pet_days (pet_id, student_id, day, auto_fed) VALUES (?, ?, ?, 1)
+                        ON CONFLICT (pet_id, day) DO UPDATE SET auto_fed = 1`).run(p.id, p.student_id, d);
+            addPoops(p, at);
+        }
+    };
+
+    // 자동 청소기: 똥이 나오고 12시간 지나면 하루 1번 그때까지 나온 똥을 치운다
+    const runRobot = (p: PetRow, now: number) => {
+        const since = placedAt(p.student_id, 'robot');
+        if (since === null) return;
+        let last = p.robot_day;
+        for (let i = 0; i < 8; i++) {
+            const r = db.prepare('SELECT MIN(at) AS at FROM pet_poops WHERE pet_id = ? AND cleaned_at IS NULL').get(p.id) as { at: number | null };
+            if (r.at === null) break;
+            let at = Math.max(r.at + 12 * H, since);
+            if (last && kstDay(at) <= last) at = Math.max(at, dayStart(addDays(last, 1)));   // 하루 1번
+            if (at > now) break;
+            db.prepare('UPDATE pet_poops SET cleaned_at = ? WHERE pet_id = ? AND cleaned_at IS NULL AND at <= ?').run(at, p.id, at);
+            last = kstDay(at);
+            db.prepare('UPDATE pets SET robot_day = ? WHERE id = ?').run(last, p.id);
+        }
+    };
 
     const evaluate = (p: PetRow): PetRow => {
         if (p.status !== 'active' || p.stage === 'egg') return p;
         const now = Date.now();
         const set = (sql: string, ...args: unknown[]) => { db.prepare(`UPDATE pets SET ${sql}, updated_at = ? WHERE id = ?`).run(...args, now, p.id); p = getPet(p.id); };
+
+        // 능력 물건이 먼저 일한다
+        runFeeder(p, now);
+        runRobot(p, now);
+        p = getPet(p.id);
 
         // 7일 굶으면 떠난다
         const starveAt = dayStart(addDays(fedBase(p), 7));
@@ -258,7 +325,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                 stage: p.stage,
                 gone: p.status === 'gone' ? { reason: p.gone_reason } : null,
                 mood: egg ? 'normal' : mood(p, now, today, fullness, d),
-                fed_today: !!d?.fed,
+                fed_today: !!d?.fed || !!d?.auto_fed,
+                auto_fed_today: !!d?.auto_fed,
                 patted_today: !!d?.patted,
                 fullness,
                 poops: poops.filter(x => x.at <= now).map(({ id, u, v }) => ({ id, u, v })),
@@ -280,10 +348,13 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                 growth: tester ? growth(p, today, h.room_level) : hideCounts(growth(p, today, h.room_level)),
             },
             tester,
-            room: { level: h.room_level, max: MAX_ROOM, next_price: ROOM_PRICES[h.room_level] ?? null },
-            items: owned(p.student_id),
+            room: {
+                level: h.room_level, max: MAX_ROOM, next_price: ROOM_PRICES[h.room_level] ?? null,
+                slots: SLOTS[h.room_level], used: placedCount(p.student_id),
+            },
+            items: itemList(p.student_id),
             decor: { wallpaper: h.wallpaper, cushion: h.cushion },
-            shop: { snacks: SNACKS, toys: TOYS, decor: DECOR, ...PRICES, feed: FEED_PRICE },
+            shop: { snacks: SNACKS, toys: TOYS, decor: DECOR, gadgets: GADGETS, ...PRICES, feed: FEED_PRICE },
         };
     };
 
@@ -323,15 +394,13 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
 
     // 밥 (하루 1번, 🔶3)
     action('/pet/feed', null, (p, _b, { now, today, studentId }) => {
-        if (dayRow(p, today)?.fed) return 'already_fed';
+        const dr = dayRow(p, today);
+        if (dr?.fed || dr?.auto_fed) return 'already_fed';
         if (!spendTopaz(studentId, FEED_PRICE, 'pet_feed', p.id)) return 'insufficient_gems';
         db.prepare('UPDATE pets SET fed_days = fed_days + 1, last_fed_day = ?, last_fed_at = ?, updated_at = ? WHERE id = ?')
             .run(today, now, now, p.id);
         markDay(p, 'fed', today);
-        for (const h of POOP_AFTER_H) {
-            db.prepare('INSERT INTO pet_poops (id, pet_id, student_id, at, u, v) VALUES (?, ?, ?, ?, ?, ?)')
-                .run(ulid(), p.id, p.student_id, now + h * H, Math.random(), Math.random());
-        }
+        addPoops(p, now);
         return 'ok';
     });
 
@@ -421,16 +490,31 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         return 'ok';
     });
 
-    // 장난감·가구 사기 {item} (한 번 사면 계속). 벽지·쿠션은 사면 바로 바뀐다
+    // 장난감·가구·능력 물건 사기 {item} (한 번 사면 계속). 자리가 있으면 방에, 없으면 창고에.
+    // 벽지·쿠션은 사면 바로 바뀐다
     action('/pet/buy', ItemBody, (_p, body, { now, studentId }) => {
-        const price = TOYS[body.item] ?? DECOR[body.item];
+        const price = itemPrice(body.item);
         if (price === undefined) return 'unknown_item';
         if (db.prepare('SELECT 1 FROM pet_items WHERE student_id = ? AND item_key = ?').get(studentId, body.item)) return 'already_owned';
         if (!spendTopaz(studentId, price, 'pet_item', body.item)) return 'insufficient_gems';
-        db.prepare('INSERT INTO pet_items (student_id, item_key, created_at) VALUES (?, ?, ?)').run(studentId, body.item, now);
+        const place = PLACEABLE.has(body.item) && placedCount(studentId) < SLOTS[roomLevel(studentId)];
+        db.prepare('INSERT INTO pet_items (student_id, item_key, created_at, placed, placed_at) VALUES (?, ?, ?, ?, ?)')
+            .run(studentId, body.item, now, place ? 1 : 0, place ? now : null);
         ensureHome(studentId);
         if (body.item.startsWith('wall_')) db.prepare('UPDATE pet_home SET wallpaper = ?, updated_at = ? WHERE student_id = ?').run(body.item, now, studentId);
         if (body.item.startsWith('cushion_')) db.prepare('UPDATE pet_home SET cushion = ?, updated_at = ? WHERE student_id = ?').run(body.item, now, studentId);
+        return 'ok';
+    }, { allowEgg: true, allowGone: true });
+
+    // 창고에서 꺼내기 / 넣기 {item, placed}
+    action('/pet/place', PlaceBody, (_p, body, { studentId }) => {
+        if (!PLACEABLE.has(body.item)) return 'not_placeable';
+        const row = db.prepare('SELECT placed FROM pet_items WHERE student_id = ? AND item_key = ?').get(studentId, body.item) as { placed: number } | undefined;
+        if (!row) return 'not_owned';
+        if (body.placed && !row.placed && placedCount(studentId) >= SLOTS[roomLevel(studentId)]) return 'room_full';
+        if (body.placed === !!row.placed) return 'ok';
+        db.prepare('UPDATE pet_items SET placed = ?, placed_at = ? WHERE student_id = ? AND item_key = ?')
+            .run(body.placed ? 1 : 0, body.placed ? Date.now() : null, studentId, body.item);
         return 'ok';
     }, { allowEgg: true, allowGone: true });
 
