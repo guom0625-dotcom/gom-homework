@@ -198,17 +198,22 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
     };
 
     // 자동 청소기: 똥이 나오고 12시간 지나면 하루 1번 그때까지 나온 똥을 치운다
-    const runRobot = (p: PetRow, now: number) => {
+    /** 청소기가 다음에 치우러 가는 시각 (치울 똥이 없거나 청소기가 없으면 null) */
+    const robotNextAt = (p: PetRow, last: string | null): number | null => {
         const since = placedAt(p.student_id, 'robot');
-        if (since === null) return;
+        if (since === null) return null;
+        const r = db.prepare('SELECT MIN(at) AS at FROM pet_poops WHERE pet_id = ? AND cleaned_at IS NULL').get(p.id) as { at: number | null };
+        if (r.at === null) return null;
+        let at = Math.max(r.at + 12 * H, since);
+        if (last && kstDay(at) <= last) at = Math.max(at, dayStart(addDays(last, 1)));   // 하루 1번
+        return at;
+    };
+    const runRobot = (p: PetRow, now: number) => {
         let last = p.robot_day;
         for (let i = 0; i < 8; i++) {
-            const r = db.prepare('SELECT MIN(at) AS at FROM pet_poops WHERE pet_id = ? AND cleaned_at IS NULL').get(p.id) as { at: number | null };
-            if (r.at === null) break;
-            let at = Math.max(r.at + 12 * H, since);
-            if (last && kstDay(at) <= last) at = Math.max(at, dayStart(addDays(last, 1)));   // 하루 1번
-            if (at > now) break;
-            db.prepare('UPDATE pet_poops SET cleaned_at = ? WHERE pet_id = ? AND cleaned_at IS NULL AND at <= ?').run(at, p.id, at);
+            const at = robotNextAt(p, last);
+            if (at === null || at > now) break;
+            db.prepare("UPDATE pet_poops SET cleaned_at = ?, cleaned_by = 'robot' WHERE pet_id = ? AND cleaned_at IS NULL AND at <= ?").run(at, p.id, at);
             last = kstDay(at);
             db.prepare('UPDATE pets SET robot_day = ? WHERE id = ?').run(last, p.id);
         }
@@ -315,7 +320,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         const severe = sick && severeAt(p) <= now;
         // 다음에 무언가 바뀌는 시각 (앱이 그때 다시 읽는다)
         const nextAt = [poops.find(x => x.at > now)?.at, sick ? undefined : Math.min(hungerSickAt(p), poopSickAt(p)),
-            sick && !severe ? severeAt(p) : undefined, sick ? sickLeaveAt(p) : undefined, p.happy_until ?? undefined]
+            sick && !severe ? severeAt(p) : undefined, sick ? sickLeaveAt(p) : undefined, p.happy_until ?? undefined,
+            robotNextAt(p, p.robot_day) ?? undefined]
             .filter((t): t is number => typeof t === 'number' && isFinite(t) && t > now);
         return {
             pet: {
@@ -332,6 +338,9 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                 poops: poops.filter(x => x.at <= now).map(({ id, u, v }) => ({ id, u, v })),
                 next_poop_at: poops.find(x => x.at > now)?.at ?? null,
                 next_change_at: nextAt.length ? Math.min(...nextAt) : null,
+                // 최근 하루 동안 자동 청소기가 치운 똥 (앱이 청소기가 다녀가는 모습을 보여 준다)
+                robot_cleaned: (db.prepare(`SELECT id, u, v, cleaned_at AS at FROM pet_poops
+                    WHERE pet_id = ? AND cleaned_by = 'robot' AND cleaned_at > ? ORDER BY cleaned_at`).all(p.id, now - DAY) as { id: string; u: number; v: number; at: number }[]),
                 health: sick ? {
                     severe,
                     hungry: c.hunger,                 // 밥도 먹어야 낫는다
