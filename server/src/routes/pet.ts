@@ -17,6 +17,9 @@ const ROOM_PRICES = [30, 60];            // 작은 방 → 중간 방 → 큰 �
 const MAX_ROOM = ROOM_PRICES.length;
 
 type Stage = 'egg' | 'baby' | 'teen' | 'adult';
+// 펫 종류 6가지: bear 곰, dog 강아지, cat 고양이, rabbit 토끼, squirrel 다람쥐, hamster 햄스터.
+// 앱에 그림이 있는 종류만 알에서 나온다. 그림이 늘면 여기에 넣는다
+const HATCHABLE = ['bear'];
 type Cond = 'feed' | 'pat' | 'clean' | 'room';
 // 다음 단계로 가는 조건. feed·pat·clean 은 지금 단계에서의 연속 일수, room 은 방 크기
 const GROWTH: Record<Exclude<Stage, 'adult'>, { next: Stage; need: Partial<Record<Cond, number>> }> = {
@@ -41,14 +44,14 @@ const GrowBody = z.object({ name: z.string().trim().min(1).max(8).optional() }).
 const CleanBody = z.object({ id: z.string().max(40).optional() }).optional();
 
 export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandler) {
-    // 지금 키우는 펫. 처음이면 알을 무료로 하나 준다 (지금은 곰만 그림이 있다)
+    // 지금 키우는 펫. 처음이면 알을 무료로 하나 준다. 알은 종류가 정해지지 않았다 (species '')
     const activePet = (studentId: string): PetRow => {
         const row = db.prepare('SELECT * FROM pets WHERE student_id = ? AND status = \'active\'').get(studentId) as PetRow | undefined;
         if (row) return row;
         const now = Date.now();
         const id = ulid();
         db.prepare('INSERT INTO pets (id, student_id, species, stage, stage_day, created_at, updated_at) VALUES (?, ?, ?, \'egg\', ?, ?, ?)')
-            .run(id, studentId, 'bear', kstDay(now), now, now);
+            .run(id, studentId, '', kstDay(now), now, now);
         return db.prepare('SELECT * FROM pets WHERE id = ?').get(id) as PetRow;
     };
 
@@ -112,7 +115,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         return {
             pet: {
                 id: p.id,
-                species: p.species,
+                species: p.species || null,   // 알이면 아직 모른다
                 name: p.name,
                 stage: p.stage,
                 fed_today: !!day?.fed,
@@ -223,11 +226,11 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
             if (!g.next || !g.ready) return 'not_ready';
             const now = Date.now();
             if (p.stage === 'egg') {
-                const name = body.data?.name;
-                if (!name) return 'name_required';
+                // 깨어날 때 종류가 정해진다 (완전 랜덤). 이름은 깨어난 뒤에 짓는다
+                const species = HATCHABLE[Math.floor(Math.random() * HATCHABLE.length)];
                 // 깨어난 날부터 배부름을 센다
-                db.prepare('UPDATE pets SET stage = ?, stage_day = ?, name = ?, last_fed_day = NULL, updated_at = ? WHERE id = ?')
-                    .run(g.next, today, name, now, p.id);
+                db.prepare('UPDATE pets SET stage = ?, stage_day = ?, species = ?, name = ?, last_fed_day = NULL, updated_at = ? WHERE id = ?')
+                    .run(g.next, today, species, body.data?.name ?? null, now, p.id);
             } else {
                 db.prepare('UPDATE pets SET stage = ?, stage_day = ?, updated_at = ? WHERE id = ?')
                     .run(g.next, today, now, p.id);
