@@ -114,3 +114,14 @@ export async function sendPushToUser(db: Db, userId: string | null | undefined, 
     });
     return results.includes('ok');
 }
+
+/** 펫 앱 기기에 발송 (pet_push_tokens). 한 대라도 접수되면 true */
+export async function sendPetPush(db: Db, studentId: string, msg: PushMessage): Promise<boolean> {
+    const tokens = (db.prepare('SELECT token FROM pet_push_tokens WHERE student_id = ?').all(studentId) as { token: string }[])
+        .map((r) => r.token);
+    const results = await Promise.all(tokens.map((t) => sendOne(t, msg)));
+    results.forEach((r, i) => {
+        if (r === 'dead') db.prepare('DELETE FROM pet_push_tokens WHERE token = ?').run(tokens[i]);
+    });
+    return results.includes('ok');
+}

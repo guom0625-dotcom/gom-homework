@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../db.ts';
 import type { AuthHandler } from '../index.ts';
+import { sendPetPush, type PushMessage } from '../lib/push.ts';
 
 // 펫 앱(gomTamagotchi)
 // - 밥: 하루 1번 토파즈 3개. 먹고 3시간·8시간 뒤에 똥이 하나씩 나온다
@@ -112,6 +113,7 @@ const LayoutBody = z.object({
         x: z.number().min(0).max(40), z: z.number().min(0).max(40), rot: z.number().int().min(0).max(3),
     })),
 });
+const PushBody = z.object({ token: z.string().min(1).max(4096) });
 const WearBody = z.object({ slot: z.enum(['top', 'hat']), item: z.string().max(30).nullable() });
 const DecorBody = z.object({ wallpaper: z.string().max(30).nullable().optional(), cushion: z.string().max(30).nullable().optional() });
 
@@ -614,6 +616,84 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         return 'ok';
     }, { allowEgg: true, allowGone: true });
 
+    // ── 알림: 아침 8시·오후 5시에 상태와 해 줄 일을 알려 준다 (2026-10-20 사용자 결정) ──
+    // 펫 앱이 켜질 때 기기 토큰을 등록한다. 숙제앱 push_tokens 와는 따로 둔다
+    app.post('/pet/push', { preHandler: auth }, async (req, reply) => {
+        if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
+        const parsed = PushBody.safeParse(req.body);
+        if (!parsed.success) return reply.code(400).send({ error: 'invalid_body' });
+        db.prepare(`INSERT INTO pet_push_tokens (token, student_id, updated_at) VALUES (?, ?, ?)
+            ON CONFLICT (token) DO UPDATE SET student_id = excluded.student_id, updated_at = excluded.updated_at`)
+            .run(parsed.data.token, req.user.id, Date.now());
+        return { ok: true };
+    });
+    app.post('/pet/push/remove', { preHandler: auth }, async (req, reply) => {
+        const parsed = PushBody.safeParse(req.body);
+        if (!parsed.success) return reply.code(400).send({ error: 'invalid_body' });
+        db.prepare('DELETE FROM pet_push_tokens WHERE token = ? AND student_id = ?').run(parsed.data.token, req.user.id);
+        return { ok: true };
+    });
+
+    /** 알림 내용: 지금 상태 + 해 줄 일 */
+    const notifyMessage = (studentId: string, slot: 'morning' | 'evening'): PushMessage => {
+        const v = view(currentPet(studentId));
+        const p = v.pet;
+        const KO: Record<string, string> = { bear: '곰', dog: '강아지', cat: '고양이', rabbit: '토끼', squirrel: '다람쥐', hamster: '햄스터' };
+        const name = p.name ?? (p.stage === 'egg' ? '알' : KO[p.species ?? ''] ?? '펫');
+        const title = p.stage === 'egg' ? '🥚 알' : `🐾 ${name}`;
+        // 받침이 있으면 '이', 없으면 '가'
+        const code = name.charCodeAt(name.length - 1);
+        const iga = code >= 0xAC00 && code <= 0xD7A3 && (code - 0xAC00) % 28 ? '이' : '가';
+        if (p.gone) return { title, body: `${name}${iga} 떠나며 편지를 남겼어요… ✉️`, data: { type: 'pet' } };
+        const asks: string[] = [];
+        let status: string;
+        if (p.stage === 'egg') {
+            status = p.growth.ready ? '알이 꿈틀꿈틀! 곧 깨어날 것 같아요 🐣' : '알이 따뜻하게 품어 주기를 기다려요';
+            if (!p.patted_today) asks.push('🤲 품어 주기');
+        } else {
+            if (p.health?.severe) status = '많이 아파요 🤒';
+            else if (p.health) status = '아파요 🤒';
+            else if (p.fullness === 0) status = '배가 너무 고파요 😢';
+            else status = ({ happy: '기분이 좋아요 😊', sad: '조금 우울해요 😢', angry: '밥을 걸러서 화났어요 😠', hungry: '배고파요 🍚' } as Record<string, string>)[p.mood]
+                ?? (slot === 'morning' ? '좋은 아침이에요 ☀️' : '오늘 하루 어땠어요? 🌇');
+            if (p.health?.severe && !p.health.visited_today) asks.push('🏥 병원 데려가기');
+            else if (p.health && !p.health.severe && !p.health.med_given) asks.push('💊 약 주기');
+            if (!p.fed_today) asks.push('🍚 밥 주기');
+            if (p.poops.length) asks.push(`💩 똥 ${p.poops.length}개 치우기`);
+            if (!p.patted_today) asks.push('🤚 쓰다듬기');
+            if (v.room.can_upgrade) asks.push('🏠 방 넓혀 주기');
+            if (p.growth.ready) asks.push('✨ 성장시키기');
+        }
+        const body = asks.length ? `${status}\n해 줄 일: ${asks.join(' · ')}` : `${status}\n오늘 할 일을 다 해 줬어요. 고마워요 💕`;
+        return { title, body, data: { type: 'pet' } };
+    };
+
+    const notifyAll = async (slot: 'morning' | 'evening', day: string) => {
+        const students = (db.prepare('SELECT DISTINCT student_id FROM pet_push_tokens').all() as { student_id: string }[]).map(r => r.student_id);
+        for (const sid of students) {
+            // 먼저 기록해서 두 번 보내지 않는다 (실패해도 다시 보내지 않는다 — 알림은 덤)
+            const fresh = db.prepare('INSERT OR IGNORE INTO pet_notify_log (student_id, day, slot, sent_at) VALUES (?, ?, ?, ?)')
+                .run(sid, day, slot, Date.now()).changes > 0;
+            if (!fresh) continue;
+            try {
+                const msg = db.transaction(() => notifyMessage(sid, slot))();
+                await sendPetPush(db, sid, msg);
+            } catch (err) {
+                app.log.error(err, 'pet notify failed');
+            }
+        }
+    };
+    // 1분마다 본다. 8시대·17시대 안이면 보낸다 (서버가 잠깐 꺼져 있었어도 그 한 시간 안에 켜지면 보낸다).
+    // 시험 서버(DB 사본)는 PET_NOTIFY=off 로 띄울 것 — 진짜 기기로 알림이 간다
+    if (process.env.PET_NOTIFY !== 'off') {
+        const timer = setInterval(() => {
+            const h = new Date(Date.now() + 9 * H).getUTCHours();
+            const slot = h === 8 ? 'morning' : h === 17 ? 'evening' : null;
+            if (slot) void notifyAll(slot, kstDay());
+        }, 60_000);
+        timer.unref();
+    }
+
     // 방 꾸미기 저장 {layout: {key: {x, z, rot}}} — 겹치는지는 앱이 본다. 여기선 키와 범위만
     action('/pet/layout', LayoutBody, (_p, body, { now, studentId }) => {
         const keys = Object.keys(body.layout);
@@ -724,6 +804,15 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                     run('UPDATE pets SET species = ?, variant = ? WHERE id = ?', sp, v, p.id);
                     break;
                 }
+                case 'notify':
+                    // 지금 바로 알림 한 번 (내용 확인용, 기록은 남기지 않는다)
+                    setTimeout(() => {
+                        const h = new Date(Date.now() + 9 * H).getUTCHours();
+                        const msg = db.transaction(() => notifyMessage(studentId, h < 12 ? 'morning' : 'evening'))();
+                        app.log.info({ msg }, 'pet notify test');
+                        void sendPetPush(db, studentId, msg);
+                    }, 0);
+                    break;
                 case 'reset_items':
                     run('DELETE FROM pet_items WHERE student_id = ?', studentId);
                     run('DELETE FROM pet_home WHERE student_id = ?', studentId);
