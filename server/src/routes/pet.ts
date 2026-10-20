@@ -43,7 +43,7 @@ const HELPER_EVERY_DAYS = 7;
 //  feeder 자동 급식기: 밥을 안 준 날 밤 9시에 밥을 준다 (🔶3 나감, '밥 준 날'로는 세지 않는다)
 //  firstaid 구급상자: 중병이 되기까지 1일 → 2일
 //  bed 포근한 침대: 아파서 떠나기까지 3일 → 4일
-const GADGETS: Record<string, number> = { robot: 80, feeder: 100, firstaid: 50, bed: 60 };
+const GADGETS: Record<string, number> = { robot: 800, feeder: 1000, firstaid: 500, bed: 600 };   // 2026-10-20 10배로 올림
 /** 방 크기별로 꺼내 놓을 수 있는 물건 수 (벽지·쿠션 색은 세지 않는다) */
 const SLOTS = [2, 4, 6];
 const PLACEABLE = new Set([...Object.keys(TOYS), ...Object.keys(GADGETS), 'rug', 'plant', 'curtain']);
