@@ -70,8 +70,9 @@ const clothInfo = (item: string, stage: string) => {
 
 type Stage = 'egg' | 'baby' | 'teen' | 'adult';
 // 펫 종류 6가지: bear 곰, dog 강아지, cat 고양이, rabbit 토끼, squirrel 다람쥐, hamster 햄스터.
-// 앱에 그림이 있는 종류만 알에서 나온다. 그림이 늘면 여기에 넣는다
-const HATCHABLE = ['bear'];
+// 앱에 그림이 있는 종류만 알에서 나온다. 값은 털색·무늬 가짓수 (앱 src/pet/species.ts 의 looks 개수와 맞출 것)
+const VARIANTS: Record<string, number> = { bear: 4, dog: 5, cat: 5, rabbit: 4, squirrel: 2, hamster: 4 };
+const HATCHABLE = Object.keys(VARIANTS);
 type Cond = 'feed' | 'pat' | 'clean' | 'room';
 // 다음 단계로 가는 조건. feed·pat·clean 은 지금 단계의 누적 일수, room 은 방 크기
 const GROWTH: Record<Exclude<Stage, 'adult'>, { next: Stage; need: Partial<Record<Cond, number>> }> = {
@@ -86,7 +87,7 @@ interface PetRow {
     stage: Stage; stage_day: string; fed_days: number; last_fed_day: string | null; created_at: number;
     sick_since: number | null; med_given: number; hospital_visits: number; happy_until: number | null;
     helper_day: string | null; gone_at: number | null; gone_reason: string | null; robot_day: string | null;
-    wear_top: string | null; wear_hat: string | null;
+    wear_top: string | null; wear_hat: string | null; variant: number;
 }
 interface DayRow { fed: number; patted: number; cleaned: number; snacks: number; hospital: number; auto_fed: number }
 
@@ -363,6 +364,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
             pet: {
                 id: p.id,
                 species: p.species || null,   // 알이면 아직 모른다
+                variant: p.variant,           // 털색·무늬
                 name: p.name,
                 stage: p.stage,
                 gone: p.status === 'gone' ? { reason: p.gone_reason } : null,
@@ -494,9 +496,10 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         if (!g.next || !g.ready) return 'not_ready';
         if (p.stage === 'egg') {
             const species = HATCHABLE[Math.floor(Math.random() * HATCHABLE.length)];
+            const variant = Math.floor(Math.random() * VARIANTS[species]);
             // 깨어난 날부터 배부름을 센다
-            db.prepare('UPDATE pets SET stage = ?, stage_day = ?, species = ?, name = ?, last_fed_day = NULL, helper_day = NULL, updated_at = ? WHERE id = ?')
-                .run(g.next, today, species, body?.name ?? null, now, p.id);
+            db.prepare('UPDATE pets SET stage = ?, stage_day = ?, species = ?, variant = ?, name = ?, last_fed_day = NULL, helper_day = NULL, updated_at = ? WHERE id = ?')
+                .run(g.next, today, species, variant, body?.name ?? null, now, p.id);
         } else {
             // 몸이 커져서 입던 옷은 벗겨진다
             db.prepare('UPDATE pets SET stage = ?, stage_day = ?, helper_day = NULL, wear_top = NULL, wear_hat = NULL, updated_at = ? WHERE id = ?').run(g.next, today, now, p.id);
@@ -712,6 +715,15 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                     run('UPDATE pet_poops SET cleaned_at = ? WHERE pet_id = ? AND cleaned_at IS NULL', now, p.id);
                     newEgg(studentId);
                     break;
+                case 'next_look': {
+                    // 종류·무늬를 차례로 바꿔 본다 (그림 확인용)
+                    if (p.stage === 'egg') return 'egg';
+                    const all = HATCHABLE.flatMap(sp => Array.from({ length: VARIANTS[sp] }, (_, v) => [sp, v] as const));
+                    const i = all.findIndex(([sp, v]) => sp === p.species && v === p.variant);
+                    const [sp, v] = all[(i + 1) % all.length];
+                    run('UPDATE pets SET species = ?, variant = ? WHERE id = ?', sp, v, p.id);
+                    break;
+                }
                 case 'reset_items':
                     run('DELETE FROM pet_items WHERE student_id = ?', studentId);
                     run('DELETE FROM pet_home WHERE student_id = ?', studentId);
