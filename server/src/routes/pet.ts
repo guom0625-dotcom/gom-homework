@@ -48,6 +48,24 @@ const GADGETS: Record<string, number> = { robot: 80, feeder: 100, firstaid: 50, 
 const SLOTS = [2, 4, 6];
 const PLACEABLE = new Set([...Object.keys(TOYS), ...Object.keys(GADGETS), 'rug', 'plant', 'curtain']);
 const itemPrice = (key: string): number | undefined => TOYS[key] ?? DECOR[key] ?? GADGETS[key];
+// 옷 (2026-10-20 사용자 결정): 상의·모자를 모양×색으로 판다. 그 시기 크기로만 사고 입는다 —
+// 자라면 벗겨지고 새로 사야 한다. 클수록 비싸다. pet_items 에 'top_tee_red@baby' 처럼 둔다
+const TOPS: Record<string, number> = { tee: 10, stripe: 12, hoodie: 15, overalls: 15 };
+const HATS: Record<string, number> = { ribbon: 6, beanie: 8, cap: 10, straw: 12, crown: 20 };
+const COLORS = ['red', 'blue', 'yellow', 'green', 'pink'];
+const SIZE_MULT: Record<string, number> = { baby: 1, teen: 1.5, adult: 2 };
+const clothesPrices = (stage: string) => {
+    const m = SIZE_MULT[stage] ?? 1;
+    const scale = (t: Record<string, number>) => Object.fromEntries(Object.entries(t).map(([k, v]) => [k, Math.round(v * m)]));
+    return { tops: scale(TOPS), hats: scale(HATS) };
+};
+/** 'top_tee_red' → {slot, price}. 모르는 옷이면 undefined */
+const clothInfo = (item: string, stage: string) => {
+    const m = /^(top|hat)_([a-z]+)_([a-z]+)$/.exec(item);
+    if (!m || !COLORS.includes(m[3]) || !(stage in SIZE_MULT)) return undefined;
+    const price = clothesPrices(stage)[m[1] === 'top' ? 'tops' : 'hats'][m[2]];
+    return price === undefined ? undefined : { slot: m[1] as 'top' | 'hat', price };
+};
 
 type Stage = 'egg' | 'baby' | 'teen' | 'adult';
 // 펫 종류 6가지: bear 곰, dog 강아지, cat 고양이, rabbit 토끼, squirrel 다람쥐, hamster 햄스터.
@@ -67,6 +85,7 @@ interface PetRow {
     stage: Stage; stage_day: string; fed_days: number; last_fed_day: string | null; created_at: number;
     sick_since: number | null; med_given: number; hospital_visits: number; happy_until: number | null;
     helper_day: string | null; gone_at: number | null; gone_reason: string | null; robot_day: string | null;
+    wear_top: string | null; wear_hat: string | null;
 }
 interface DayRow { fed: number; patted: number; cleaned: number; snacks: number; hospital: number; auto_fed: number }
 
@@ -84,6 +103,7 @@ const CleanBody = z.object({ id: z.string().max(40).optional() }).optional();
 const ItemBody = z.object({ item: z.string().max(30) });
 const PlaceBody = z.object({ item: z.string().max(30), placed: z.boolean() });
 const TestBody = z.object({ action: z.string().max(30) });
+const WearBody = z.object({ slot: z.enum(['top', 'hat']), item: z.string().max(30).nullable() });
 const DecorBody = z.object({ wallpaper: z.string().max(30).nullable().optional(), cushion: z.string().max(30).nullable().optional() });
 
 type Result = 'ok' | string;
@@ -354,6 +374,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                 snacks_today: d?.snacks ?? 0,
                 snacks_per_day: SNACKS_PER_DAY,
                 helper_ready: helperReady(p, today) && lastMissedDay(p, today) !== null,
+                // 입고 있는 옷 ('top_tee_red', 크기 표시는 뺀다)
+                wear: { top: p.wear_top?.split('@')[0] ?? null, hat: p.wear_hat?.split('@')[0] ?? null },
                 growth: tester ? growth(p, today, h.room_level) : hideCounts(growth(p, today, h.room_level)),
             },
             tester,
@@ -363,7 +385,11 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
             },
             items: itemList(p.student_id),
             decor: { wallpaper: h.wallpaper, cushion: h.cushion },
-            shop: { snacks: SNACKS, toys: TOYS, decor: DECOR, gadgets: GADGETS, ...PRICES, feed: FEED_PRICE },
+            shop: {
+                snacks: SNACKS, toys: TOYS, decor: DECOR, gadgets: GADGETS, ...PRICES, feed: FEED_PRICE,
+                // 지금 크기의 옷값 (알이면 유아 크기 값을 보여 주기만 한다)
+                clothes: { ...clothesPrices(egg ? 'baby' : p.stage), colors: COLORS },
+            },
         };
     };
 
@@ -452,7 +478,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
             db.prepare('UPDATE pets SET stage = ?, stage_day = ?, species = ?, name = ?, last_fed_day = NULL, helper_day = NULL, updated_at = ? WHERE id = ?')
                 .run(g.next, today, species, body?.name ?? null, now, p.id);
         } else {
-            db.prepare('UPDATE pets SET stage = ?, stage_day = ?, helper_day = NULL, updated_at = ? WHERE id = ?').run(g.next, today, now, p.id);
+            // 몸이 커져서 입던 옷은 벗겨진다
+            db.prepare('UPDATE pets SET stage = ?, stage_day = ?, helper_day = NULL, wear_top = NULL, wear_hat = NULL, updated_at = ? WHERE id = ?').run(g.next, today, now, p.id);
         }
         return 'ok';
     }, { allowEgg: true });
@@ -496,6 +523,33 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         `).run(p.id, p.student_id, today);
         db.prepare('UPDATE pets SET happy_until = ?, updated_at = ? WHERE id = ?')
             .run(Math.max(p.happy_until ?? 0, now + s.hours * H), now, p.id);
+        return 'ok';
+    });
+
+    // 옷 사기 {item: 'top_tee_red'} — 지금 크기로. 사면 바로 입는다
+    action('/pet/buy-clothes', ItemBody, (p, body, { now, studentId }) => {
+        const c = clothInfo(body.item, p.stage);
+        if (!c) return 'unknown_item';
+        const key = `${body.item}@${p.stage}`;
+        if (db.prepare('SELECT 1 FROM pet_items WHERE student_id = ? AND item_key = ?').get(studentId, key)) return 'already_owned';
+        if (!spendTopaz(studentId, c.price, 'pet_clothes', key)) return 'insufficient_gems';
+        db.prepare('INSERT INTO pet_items (student_id, item_key, created_at, placed) VALUES (?, ?, ?, 0)').run(studentId, key, now);
+        db.prepare(`UPDATE pets SET ${c.slot === 'top' ? 'wear_top' : 'wear_hat'} = ?, updated_at = ? WHERE id = ?`).run(key, now, p.id);
+        return 'ok';
+    });
+
+    // 옷 입기·벗기 {slot, item|null} — 지금 크기에 맞는 옷만
+    action('/pet/wear', WearBody, (p, body, { now, studentId }) => {
+        const col = body.slot === 'top' ? 'wear_top' : 'wear_hat';
+        if (body.item === null) {
+            db.prepare(`UPDATE pets SET ${col} = NULL, updated_at = ? WHERE id = ?`).run(now, p.id);
+            return 'ok';
+        }
+        const c = clothInfo(body.item, p.stage);
+        if (!c || c.slot !== body.slot) return 'unknown_item';
+        const key = `${body.item}@${p.stage}`;
+        if (!db.prepare('SELECT 1 FROM pet_items WHERE student_id = ? AND item_key = ?').get(studentId, key)) return 'not_owned';
+        db.prepare(`UPDATE pets SET ${col} = ?, updated_at = ? WHERE id = ?`).run(key, now, p.id);
         return 'ok';
     });
 
@@ -632,6 +686,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                 case 'reset_items':
                     run('DELETE FROM pet_items WHERE student_id = ?', studentId);
                     run('DELETE FROM pet_home WHERE student_id = ?', studentId);
+                    run('UPDATE pets SET wear_top = NULL, wear_hat = NULL WHERE id = ?', p.id);
                     break;
                 default:
                     return 'unknown_action';
