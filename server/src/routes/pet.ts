@@ -72,11 +72,14 @@ const NameBody = z.object({ name: z.string().trim().min(1).max(8) });
 const GrowBody = z.object({ name: z.string().trim().min(1).max(8).optional() }).optional();
 const CleanBody = z.object({ id: z.string().max(40).optional() }).optional();
 const ItemBody = z.object({ item: z.string().max(30) });
+const TestBody = z.object({ action: z.string().max(30) });
 const DecorBody = z.object({ wallpaper: z.string().max(30).nullable().optional(), cushion: z.string().max(30).nullable().optional() });
 
 type Result = 'ok' | string;
 
 export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandler) {
+    // 시험 기능(시간 건너뛰기 등)을 쓸 수 있고 성장 조건 숫자를 볼 수 있는 학생 (server/.env)
+    const TESTERS = new Set((process.env.PET_TEST_STUDENTS ?? '').split(',').map(x => x.trim()).filter(Boolean));
     const getPet = (id: string) => db.prepare('SELECT * FROM pets WHERE id = ?').get(id) as PetRow;
 
     const newEgg = (studentId: string) => {
@@ -201,6 +204,12 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         return { next: g.next, ready: conds.every(c => c.have >= c.need), conds };
     };
 
+    /** 아이에게는 무엇이 몇 번 남았는지 보이지 않게: 준비됐는지와 방이 좁은지만 */
+    const hideCounts = (g: ReturnType<typeof growth>) => ({
+        next: g.next, ready: g.ready, conds: [],
+        room_short: g.conds.some(c => c.key === 'room' && c.have < c.need),
+    });
+
     /** 돌봄 도우미로 지울 수 있는 가장 최근의 빠진 날 (단계 시작일 ~ 어제) */
     const lastMissedDay = (p: PetRow, today: string): string | null => {
         const fields = p.stage === 'egg' ? ['patted'] : ['fed', 'patted', 'cleaned'];
@@ -231,6 +240,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         const d = dayRow(p, today);
         const poops = db.prepare('SELECT id, at, u, v FROM pet_poops WHERE pet_id = ? AND cleaned_at IS NULL ORDER BY at').all(p.id) as { id: string; at: number; u: number; v: number }[];
         const egg = p.stage === 'egg';
+        const tester = TESTERS.has(p.student_id);
         // 알은 먹지 않는다. 깨어난 뒤 한 번도 안 먹었으면 깨어난 날을 마지막 밥 날로 친다
         const fullness = egg ? FULL : Math.max(0, FULL - daysBetween(fedBase(p), today));
         const sick = p.sick_since !== null;
@@ -267,8 +277,9 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                 snacks_today: d?.snacks ?? 0,
                 snacks_per_day: SNACKS_PER_DAY,
                 helper_ready: helperReady(p, today) && lastMissedDay(p, today) !== null,
-                growth: growth(p, today, h.room_level),
+                growth: tester ? growth(p, today, h.room_level) : hideCounts(growth(p, today, h.room_level)),
             },
+            tester,
             room: { level: h.room_level, max: MAX_ROOM, next_price: ROOM_PRICES[h.room_level] ?? null },
             items: owned(p.student_id),
             decor: { wallpaper: h.wallpaper, cushion: h.cushion },
@@ -456,4 +467,85 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         newEgg(studentId);
         return 'ok';
     }, { allowGone: true, allowEgg: true });
+
+    // 시험 기능 {action} — PET_TEST_STUDENTS 에 있는 학생만
+    app.post('/pet/test', { preHandler: auth }, async (req, reply) => {
+        if (req.user.role !== 'student' || !TESTERS.has(req.user.id)) return reply.code(403).send({ error: 'forbidden' });
+        const parsed = TestBody.safeParse(req.body);
+        if (!parsed.success) return reply.code(400).send({ error: 'invalid_body' });
+        const studentId = req.user.id;
+        const result = db.transaction((): Result => {
+            let p = db.prepare(`SELECT * FROM pets WHERE student_id = ? AND status IN ('active', 'gone') ORDER BY created_at DESC LIMIT 1`).get(studentId) as PetRow | undefined;
+            if (!p) p = newEgg(studentId);
+            const now = Date.now();
+            const today = kstDay(now);
+            const run = (sql: string, ...args: unknown[]) => db.prepare(sql).run(...args);
+            // 시간을 ms 만큼 앞으로 보낸다 = 기록을 그만큼 과거로 민다
+            const shiftMs = (ms: number) => {
+                run('UPDATE pets SET sick_since = sick_since - ?, happy_until = happy_until - ?, last_fed_at = last_fed_at - ?, created_at = created_at - ? WHERE id = ?', ms, ms, ms, ms, p!.id);
+                run('UPDATE pet_poops SET at = at - ?, cleaned_at = cleaned_at - ? WHERE pet_id = ?', ms, ms, p!.id);
+            };
+            switch (parsed.data.action) {
+                case 'next_day': {
+                    // 날짜 기록을 하루씩 과거로 (기본키가 겹치지 않게 두 번에 나눠서)
+                    shiftMs(DAY);
+                    run("UPDATE pets SET stage_day = date(stage_day, '-1 day'), last_fed_day = date(last_fed_day, '-1 day'), helper_day = date(helper_day, '-1 day') WHERE id = ?", p.id);
+                    run("UPDATE pet_days SET day = 'x' || day WHERE pet_id = ?", p.id);
+                    run("UPDATE pet_days SET day = date(substr(day, 2), '-1 day') WHERE pet_id = ?", p.id);
+                    break;
+                }
+                case 'hours_8': shiftMs(8 * H); break;
+                case 'fill': {
+                    if (p.stage === 'adult') return 'adult';
+                    const need = Math.max(...Object.entries(GROWTH[p.stage].need).filter(([k]) => k !== 'room').map(([, v]) => v!));
+                    const start = addDays(today, -need);
+                    run('UPDATE pets SET stage_day = ? WHERE id = ?', start, p.id);
+                    for (let d = start; d < today; d = addDays(d, 1)) {
+                        run(`INSERT INTO pet_days (pet_id, student_id, day, fed, patted, cleaned) VALUES (?, ?, ?, 1, 1, 1)
+                             ON CONFLICT (pet_id, day) DO UPDATE SET fed = 1, patted = 1, cleaned = 1`, p.id, studentId, d);
+                    }
+                    if (p.stage !== 'egg' && !p.last_fed_day) run('UPDATE pets SET last_fed_day = ? WHERE id = ?', addDays(today, -1), p.id);
+                    break;
+                }
+                case 'poop':
+                case 'poop_old':
+                    if (p.stage === 'egg') return 'egg';
+                    run('INSERT INTO pet_poops (id, pet_id, student_id, at, u, v) VALUES (?, ?, ?, ?, ?, ?)',
+                        ulid(), p.id, studentId, parsed.data.action === 'poop' ? now : now - DAY - H, Math.random(), Math.random());
+                    break;
+                case 'sick':
+                case 'severe':
+                    if (p.stage === 'egg') return 'egg';
+                    run('UPDATE pets SET sick_since = ?, med_given = 0, hospital_visits = 0 WHERE id = ?', parsed.data.action === 'sick' ? now : now - DAY - H, p.id);
+                    break;
+                case 'heal':
+                    run('UPDATE pets SET sick_since = NULL, med_given = 0, hospital_visits = 0 WHERE id = ?', p.id);
+                    run('UPDATE pet_poops SET cleaned_at = ? WHERE pet_id = ? AND cleaned_at IS NULL', now, p.id);
+                    if (p.stage !== 'egg') run('UPDATE pets SET last_fed_day = ? WHERE id = ?', today, p.id);
+                    break;
+                case 'leave':
+                    if (p.stage === 'egg') return 'egg';
+                    run("UPDATE pets SET status = 'gone', gone_at = ?, gone_reason = 'sick' WHERE id = ?", now, p.id);
+                    break;
+                case 'reset_today':
+                    run('DELETE FROM pet_days WHERE pet_id = ? AND day = ?', p.id, today);
+                    run('UPDATE pets SET happy_until = NULL WHERE id = ?', p.id);
+                    break;
+                case 'new_egg':
+                    run("UPDATE pets SET status = 'left' WHERE id = ?", p.id);
+                    run('UPDATE pet_poops SET cleaned_at = ? WHERE pet_id = ? AND cleaned_at IS NULL', now, p.id);
+                    newEgg(studentId);
+                    break;
+                case 'reset_items':
+                    run('DELETE FROM pet_items WHERE student_id = ?', studentId);
+                    run('DELETE FROM pet_home WHERE student_id = ?', studentId);
+                    break;
+                default:
+                    return 'unknown_action';
+            }
+            return 'ok';
+        })();
+        if (result !== 'ok') return reply.code(409).send({ error: result });
+        return db.transaction(() => withGems(studentId))();
+    });
 }
