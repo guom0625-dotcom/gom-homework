@@ -9,6 +9,7 @@ import type { AuthHandler } from '../index.ts';
 // - 쓰다듬기(알이면 품어주기): 하루 1번, 무료
 // - 청소: 무료. 그날 똥을 하나라도 치우면 '청소한 날'
 // - 성장: 단계마다 조건(누적 일수·방 크기)을 모두 채우면 아이가 성장 버튼을 누른다.
+//   방은 다른 조건을 다 채워야 넓힐 수 있다 (돌봄 → 방 넓히기 → 성장)
 //   누적 일수는 빠진 날 이틀마다 하루씩 깎인다 (2026-10-20 사용자 결정)
 // - 아픔: 배부름 0으로 2일(마지막 밥 날 +5일) 또는 똥을 24시간 넘게 두면 아프다.
 //   약(🔶10)으로 낫는다. 굶어서 아프면 밥도 먹어야 낫는다. 똥이 남아 있으면 다시 아프다.
@@ -296,6 +297,14 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         return { next: g.next, ready: conds.every(c => c.have >= c.need), conds };
     };
 
+    /** 방을 넓힐 수 있나: 이번 단계에 더 큰 방이 필요하고, 방 말고 다른 조건은 다 채웠을 때 (2026-10-20 사용자 결정) */
+    const roomReady = (p: PetRow, today: string, room: number) => {
+        if (p.status !== 'active' || p.stage === 'adult') return false;
+        const need = GROWTH[p.stage].need.room;
+        if (need === undefined || room >= need) return false;
+        return growth(p, today, room).conds.every(c => c.key === 'room' || c.have >= c.need);
+    };
+
     /** 아이에게는 무엇이 몇 번 남았는지 보이지 않게: 준비됐는지와 방이 좁은지만 */
     const hideCounts = (g: ReturnType<typeof growth>) => ({
         next: g.next, ready: g.ready, conds: [],
@@ -382,6 +391,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
             room: {
                 level: h.room_level, max: MAX_ROOM, next_price: ROOM_PRICES[h.room_level] ?? null,
                 slots: SLOTS[h.room_level], used: placedCount(p.student_id),
+                can_upgrade: roomReady(p, today, h.room_level),
             },
             items: itemList(p.student_id),
             decor: { wallpaper: h.wallpaper, cushion: h.cushion },
@@ -456,16 +466,17 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         return 'ok';
     });
 
-    // 방 한 단계 넓히기 (토파즈)
-    action('/pet/room', null, (_p, _b, { studentId, now }) => {
+    // 방 한 단계 넓히기 (토파즈). 방 말고 다른 성장 조건을 다 채웠을 때만 — 넓히면 성장 버튼이 켜진다
+    action('/pet/room', null, (p, _b, { studentId, now, today }) => {
         const level = roomLevel(studentId);
         const price = ROOM_PRICES[level];
         if (price === undefined) return 'max_room';
+        if (!roomReady(p, today, level)) return 'room_not_ready';
         if (!spendTopaz(studentId, price, 'pet_room', String(level + 1))) return 'insufficient_gems';
         ensureHome(studentId);
         db.prepare('UPDATE pet_home SET room_level = ?, updated_at = ? WHERE student_id = ?').run(level + 1, now, studentId);
         return 'ok';
-    }, { allowEgg: true, allowGone: true });
+    });
 
     // 성장 (조건을 다 채웠을 때). 알이 깨어날 때 종류가 정해진다
     action('/pet/grow', GrowBody, (p, body, { now, today, studentId }) => {
