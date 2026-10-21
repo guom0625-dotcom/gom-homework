@@ -77,10 +77,10 @@ const HATCHABLE = Object.keys(VARIANTS);
 type Cond = 'feed' | 'pat' | 'clean' | 'room';
 // 다음 단계로 가는 조건. feed·pat·clean 은 지금 단계의 누적 일수, room 은 방 크기
 const GROWTH: Record<Exclude<Stage, 'adult'>, { next: Stage; need: Partial<Record<Cond, number>> }> = {
-    // 알 3일 + 유아 45일 + 청소년 80일 = 약 4달 반 (2026-10-20 사용자 결정)
-    egg: { next: 'baby', need: { pat: 3 } },
-    baby: { next: 'teen', need: { feed: 45, pat: 45, clean: 45, room: 1 } },
-    teen: { next: 'adult', need: { feed: 80, pat: 80, clean: 80, room: 2 } },
+    // 알 2일 + 유아 7일 + 청소년 15일 → 성인이 되면 졸업해서 도감에 남긴다 (2026-10-21 사용자 결정)
+    egg: { next: 'baby', need: { pat: 2 } },
+    baby: { next: 'teen', need: { feed: 7, pat: 7, clean: 7, room: 1 } },
+    teen: { next: 'adult', need: { feed: 15, pat: 15, clean: 15, room: 2 } },
 };
 
 interface PetRow {
@@ -161,6 +161,20 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         (db.prepare('SELECT placed_at FROM pet_items WHERE student_id = ? AND item_key = ? AND placed = 1').get(studentId, key) as { placed_at: number | null } | undefined)?.placed_at ?? null;
     const placedCount = (studentId: string) =>
         (db.prepare('SELECT COUNT(*) AS n FROM pet_items WHERE student_id = ? AND placed = 1').get(studentId) as { n: number }).n;
+
+    /** 도감: 졸업한 펫 (졸업한 순서) */
+    const dex = (studentId: string) =>
+        db.prepare(`SELECT species, variant, name, graduated_at AS at FROM pets
+            WHERE student_id = ? AND status = 'graduated' ORDER BY graduated_at`).all(studentId) as { species: string; variant: number; name: string | null; at: number }[];
+    /** 알에서 나올 종류·무늬: 도감에 있는 것은 빼고 무작위 (다 모았으면 아무거나) */
+    const pickLook = (studentId: string) => {
+        const have = new Set(dex(studentId).map(d => `${d.species}:${d.variant}`));
+        const all = HATCHABLE.flatMap(sp => Array.from({ length: VARIANTS[sp] }, (_, v) => [sp, v] as const));
+        const left = all.filter(([sp, v]) => !have.has(`${sp}:${v}`));
+        const pool = left.length ? left : all;
+        return pool[Math.floor(Math.random() * pool.length)];
+    };
+    const DEX_TOTAL = Object.values(VARIANTS).reduce((a, b) => a + b, 0);
 
     const balance = (studentId: string) => {
         const b = db.prepare('SELECT diamond, topaz FROM gems_balance WHERE student_id = ?').get(studentId) as { diamond: number; topaz: number } | undefined;
@@ -415,6 +429,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                 can_upgrade: roomReady(p, today, h.room_level),
             },
             items: itemList(p.student_id),
+            // 도감 (졸업한 펫). total = 모을 수 있는 종류·무늬 가짓수
+            dex: { pets: dex(p.student_id), total: DEX_TOTAL },
             decor: { wallpaper: h.wallpaper, cushion: h.cushion },
             // 물건 자리와 방향. 없는 물건은 앱의 기본 자리
             layout: h.layout ? JSON.parse(h.layout) as Record<string, { x: number; z: number; rot: number }> : {},
@@ -522,8 +538,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         const g = growth(p, today, roomLevel(studentId));
         if (!g.next || !g.ready) return 'not_ready';
         if (p.stage === 'egg') {
-            const species = HATCHABLE[Math.floor(Math.random() * HATCHABLE.length)];
-            const variant = Math.floor(Math.random() * VARIANTS[species]);
+            const [species, variant] = pickLook(studentId);
             // 깨어난 날부터 배부름을 센다
             db.prepare('UPDATE pets SET stage = ?, stage_day = ?, species = ?, variant = ?, name = ?, last_fed_day = NULL, helper_day = NULL, updated_at = ? WHERE id = ?')
                 .run(g.next, today, species, variant, body?.name ?? null, now, p.id);
@@ -743,6 +758,16 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         db.prepare('UPDATE pets SET helper_day = ? WHERE id = ?').run(today, p.id);
         return 'ok';
     }, { allowEgg: true });
+
+    // 졸업 (성인이 되면 아이가 누른다). 도감에 남기고 새 알을 무료로 받는다. 방·물건은 그대로
+    action('/pet/graduate', null, (p, _b, { now, studentId }) => {
+        if (p.stage !== 'adult') return 'not_adult';
+        if (p.sick_since !== null) return 'sick';
+        db.prepare("UPDATE pets SET status = 'graduated', graduated_at = ?, updated_at = ? WHERE id = ?").run(now, now, p.id);
+        db.prepare('UPDATE pet_poops SET cleaned_at = ? WHERE pet_id = ? AND cleaned_at IS NULL').run(now, p.id);
+        newEgg(studentId);
+        return 'ok';
+    });
 
     // 새 알 (🔶20). 펫이 떠난 뒤에만
     action('/pet/new-egg', null, (p, _b, { now, studentId }) => {
