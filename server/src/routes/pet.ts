@@ -228,6 +228,16 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         }
     };
 
+    /** 급식기가 다음에 밥을 줄 시각: 오늘 밥을 안 먹었으면 오늘 밤 9시 (앱이 그때 다시 읽게) */
+    const feederNextAt = (p: PetRow, now: number): number | null => {
+        const since = placedAt(p.student_id, 'feeder');
+        if (since === null || p.stage === 'egg' || p.status !== 'active') return null;
+        const today = kstDay(now);
+        if (p.last_fed_day && p.last_fed_day >= today) return null;
+        const at = dayStart(today) + 21 * H;
+        return at >= since ? at : null;
+    };
+
     // 자동 청소기: 똥이 나오고 12시간 지나면 하루 1번 그때까지 나온 똥을 치운다
     /** 청소기가 다음에 치우러 가는 시각 (치울 똥이 없거나 청소기가 없으면 null) */
     const robotNextAt = (p: PetRow, last: string | null): number | null => {
@@ -360,7 +370,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         // 다음에 무언가 바뀌는 시각 (앱이 그때 다시 읽는다)
         const nextAt = [poops.find(x => x.at > now)?.at, sick ? undefined : Math.min(hungerSickAt(p), poopSickAt(p)),
             sick && !severe ? severeAt(p) : undefined, sick ? sickLeaveAt(p) : undefined, p.happy_until ?? undefined,
-            robotNextAt(p, p.robot_day) ?? undefined]
+            robotNextAt(p, p.robot_day) ?? undefined, feederNextAt(p, now) ?? undefined]
             .filter((t): t is number => typeof t === 'number' && isFinite(t) && t > now);
         return {
             pet: {
@@ -616,6 +626,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         if (!row) return 'not_owned';
         if (body.placed && !row.placed && placedCount(studentId) >= SLOTS[roomLevel(studentId)]) return 'room_full';
         if (body.placed === !!row.placed) return 'ok';
+        // 아픈 동안 침대·구급상자를 넣으면 그 자리에서 중병이 되거나 떠날 수 있다 → 못 넣게
+        if (!body.placed && (body.item === 'bed' || body.item === 'firstaid') && _p.status === 'active' && _p.sick_since !== null) return 'sick_in_use';
         db.prepare('UPDATE pet_items SET placed = ?, placed_at = ? WHERE student_id = ? AND item_key = ?')
             .run(body.placed ? 1 : 0, body.placed ? Date.now() : null, studentId, body.item);
         return 'ok';
