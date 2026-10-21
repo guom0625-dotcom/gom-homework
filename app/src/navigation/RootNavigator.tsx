@@ -24,10 +24,6 @@ import { BookReviewScreen } from '../screens/manager/BookReviewScreen';
 import { BookShelfScreen } from '../screens/student/BookShelfScreen';
 import { WeeklyReportScreen } from '../screens/manager/WeeklyReportScreen';
 import { ProfileScreen } from '../screens/student/ProfileScreen';
-import { MiniRoomScreen } from '../screens/student/MiniRoomScreen';
-import { FurnitureShopScreen } from '../screens/student/FurnitureShopScreen';
-import { WardrobeScreen } from '../screens/student/WardrobeScreen';
-import { RoomVisitScreen } from '../screens/manager/RoomVisitScreen';
 import { colors, fontFamilies, fontSizes, radius } from '../theme';
 
 export type AuthStackParams = {
@@ -46,9 +42,6 @@ export type StudentStackParams = {
     BookRegister: undefined;
     BookShelf: undefined;
     Profile: undefined;
-    MiniRoom: undefined;
-    FurnitureShop: undefined;
-    Wardrobe: undefined;
 };
 
 export type ManagerStackParams = {
@@ -60,7 +53,6 @@ export type ManagerStackParams = {
     RewardUse: undefined;
     BookReview: undefined;
     WeeklyReport: undefined;
-    RoomVisit: { studentId: string; studentName: string };
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
@@ -79,9 +71,6 @@ function StudentNavigator() {
             <StudentStack.Screen name="BookRegister" component={BookRegisterScreen} />
             <StudentStack.Screen name="BookShelf" component={BookShelfScreen} />
             <StudentStack.Screen name="Profile" component={ProfileScreen} />
-            <StudentStack.Screen name="MiniRoom" component={MiniRoomScreen} />
-            <StudentStack.Screen name="FurnitureShop" component={FurnitureShopScreen} />
-            <StudentStack.Screen name="Wardrobe" component={WardrobeScreen} />
         </StudentStack.Navigator>
     );
 }
@@ -97,7 +86,6 @@ function ManagerNavigator() {
             <ManagerStack.Screen name="RewardUse" component={RewardUseScreen} />
             <ManagerStack.Screen name="BookReview" component={BookReviewScreen} />
             <ManagerStack.Screen name="WeeklyReport" component={WeeklyReportScreen} />
-            <ManagerStack.Screen name="RoomVisit" component={RoomVisitScreen} />
         </ManagerStack.Navigator>
     );
 }
