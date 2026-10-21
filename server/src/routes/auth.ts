@@ -161,6 +161,12 @@ export function registerAuthRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
             db.prepare(
                 'INSERT INTO auth_keys (key_hash, user_id, created_at) VALUES (?, ?, ?)'
             ).run(hashKey(key), user.id, now);
+            // 펫 앱이 쓰던 이전 키를 같이 보내면 끊는다 — 다시 연결할 때마다 키가 쌓이지 않게
+            const prev = req.headers.authorization;
+            if (prev?.startsWith('Bearer ')) {
+                db.prepare('UPDATE auth_keys SET revoked_at = ? WHERE key_hash = ? AND revoked_at IS NULL')
+                    .run(now, hashKey(prev.slice(7)));
+            }
             return { ...user, key };
         })();
 
