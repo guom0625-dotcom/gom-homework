@@ -308,13 +308,25 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
     };
 
     // ── 성장 ───────────────────────────────────
+    /** 그날 치울 똥이 없었나: 0시~밤 9시 사이에 방에 똥이 하나도 없었다 (밤 9시 넘어 나온 똥은 다음 날 치우면 된다).
+     *  자동 청소기가 치운 똥도 있던 똥으로 친다 (청소기는 청소한 날로 안 셈) */
+    const noPoopDay = (p: PetRow, d: string) => !db.prepare(
+        'SELECT 1 FROM pet_poops WHERE pet_id = ? AND at < ? AND (cleaned_at IS NULL OR cleaned_at > ?) LIMIT 1',
+    ).get(p.id, dayStart(d) + 21 * H, dayStart(d));
     // 지금 단계에서 한 날 수 - 빠진 날 / 2 (내림). 오늘은 아직 안 했어도 빠진 날로 치지 않는다
     const progress = (p: PetRow, field: 'fed' | 'patted' | 'cleaned', today: string) => {
         const done = (db.prepare(`SELECT COUNT(*) AS n FROM pet_days WHERE pet_id = ? AND day >= ? AND day <= ? AND ${field} = 1`)
             .get(p.id, p.stage_day, today) as { n: number }).n;
         const doneToday = !!db.prepare(`SELECT 1 FROM pet_days WHERE pet_id = ? AND day = ? AND ${field} = 1`).get(p.id, today);
+        // 치울 똥이 없던 지난날은 청소한 날도 빠진 날도 아니다 (2026-10-21 사용자 결정)
+        let free = 0;
+        if (field === 'cleaned') {
+            const cleaned = new Set((db.prepare('SELECT day FROM pet_days WHERE pet_id = ? AND day >= ? AND day < ? AND cleaned = 1')
+                .all(p.id, p.stage_day, today) as { day: string }[]).map(r => r.day));
+            for (let d = p.stage_day; d < today; d = addDays(d, 1)) if (!cleaned.has(d) && noPoopDay(p, d)) free++;
+        }
         const pastDays = Math.max(0, daysBetween(p.stage_day, today));          // 단계 시작일 ~ 어제
-        const missed = Math.max(0, pastDays - (done - (doneToday ? 1 : 0)));
+        const missed = Math.max(0, pastDays - free - (done - (doneToday ? 1 : 0)));
         return { have: Math.max(0, done - Math.floor(missed / 2)), missed };
     };
 
@@ -350,7 +362,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         const fields = p.stage === 'egg' ? ['patted'] : ['fed', 'patted', 'cleaned'];
         for (let d = prevDay(today); d >= p.stage_day; d = prevDay(d)) {
             const r = dayRow(p, d) as unknown as Record<string, number> | undefined;
-            if (!r || fields.some(f => !r[f])) return d;
+            if (!r || fields.some(f => !r[f] && !(f === 'cleaned' && noPoopDay(p, d)))) return d;
         }
         return null;
     };
