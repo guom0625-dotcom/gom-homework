@@ -55,6 +55,7 @@ export type ManagerStackParams = {
     RewardUse: undefined;
     BookReview: undefined;
     WeeklyReport: undefined;
+    PetVisit: { studentId: string; studentName: string };
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
@@ -89,6 +90,7 @@ function ManagerNavigator() {
             <ManagerStack.Screen name="RewardUse" component={RewardUseScreen} />
             <ManagerStack.Screen name="BookReview" component={BookReviewScreen} />
             <ManagerStack.Screen name="WeeklyReport" component={WeeklyReportScreen} />
+            <ManagerStack.Screen name="PetVisit" component={PetVisitScreen} />
         </ManagerStack.Navigator>
     );
 }
