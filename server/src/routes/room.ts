@@ -16,7 +16,12 @@ const BuyBody = z.object({ item_key: z.string().max(50) });
 
 // 다이아 1개 = 토파즈 10개
 export const TOPAZ_PER_DIAMOND = 10;
-const ExchangeBody = z.object({ diamonds: z.number().int().min(1).max(1000) });
+export const TOPAZ_PER_RUBY = 3;   // 2026-10-21 사용자 결정: 루비 1 → 토파즈 3
+// 다이아 또는 루비 하나만 (예전 앱은 {diamonds} 만 보낸다)
+const ExchangeBody = z.object({
+    diamonds: z.number().int().min(1).max(1000).optional(),
+    rubies: z.number().int().min(1).max(1000).optional(),
+}).refine(b => (b.diamonds === undefined) !== (b.rubies === undefined));
 
 const LayoutBody = z.object({
     items: z.array(z.object({
@@ -135,28 +140,30 @@ export function registerRoomRoutes(app: FastifyInstance, db: Db, auth: AuthHandl
         return reply.code(201).send({ ...item, placed: item.placed === 1 });
     });
 
-    // POST /room/exchange  (student only — 다이아 → 토파즈. 반대 방향은 없다)
+    // POST /room/exchange {diamonds} 또는 {rubies}  (student only — 다이아 1→토파즈 10, 루비 1→토파즈 3. 반대 방향은 없다)
     app.post('/room/exchange', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
         const parsed = ExchangeBody.safeParse(req.body);
         if (!parsed.success) return reply.code(400).send({ error: 'invalid_body' });
-        const { diamonds } = parsed.data;
-        const topaz = diamonds * TOPAZ_PER_DIAMOND;
+        const [col, gemType, count, rate] = parsed.data.diamonds !== undefined
+            ? ['diamond', GEM_TYPE, parsed.data.diamonds, TOPAZ_PER_DIAMOND] as const
+            : ['ruby', 'ruby', parsed.data.rubies!, TOPAZ_PER_RUBY] as const;
+        const topaz = count * rate;
 
         const ok = db.transaction((): boolean => {
-            const balance = db.prepare('SELECT diamond FROM gems_balance WHERE student_id = ?')
-                .get(req.user.id) as { diamond: number } | undefined;
-            if (!balance || balance.diamond < diamonds) return false;
+            const balance = db.prepare(`SELECT ${col} AS n FROM gems_balance WHERE student_id = ?`)
+                .get(req.user.id) as { n: number } | undefined;
+            if (!balance || balance.n < count) return false;
             const now = Date.now();
             const ref = ulid();
             db.prepare(
-                'UPDATE gems_balance SET diamond = diamond - ?, topaz = topaz + ?, updated_at = ? WHERE student_id = ?'
-            ).run(diamonds, topaz, now, req.user.id);
+                `UPDATE gems_balance SET ${col} = ${col} - ?, topaz = topaz + ?, updated_at = ? WHERE student_id = ?`
+            ).run(count, topaz, now, req.user.id);
             const log = db.prepare(`
                 INSERT INTO gem_transactions (id, student_id, gem_type, delta, reason, ref_id, created_at)
                 VALUES (?, ?, ?, ?, 'exchange', ?, ?)
             `);
-            log.run(ulid(), req.user.id, GEM_TYPE, -diamonds, ref, now);
+            log.run(ulid(), req.user.id, gemType, -count, ref, now);
             log.run(ulid(), req.user.id, 'topaz', topaz, ref, now);
             return true;
         })();
