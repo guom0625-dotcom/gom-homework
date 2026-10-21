@@ -307,6 +307,28 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         return p;
     };
 
+    // ── 체형 (2026-10-21 사용자 결정) ─────────────────
+    // 최근 7일(오늘 포함): 밥 먹은 날 +1, 간식 하나 +0.5, 거른 날 -1 (오늘은 아직 안 먹었어도 0).
+    // 처음 밥을 먹기 전 날은 +1 로 친다. 펫마다 기록이 남으니 자라도 체형이 이어진다
+    const buildScore = (p: PetRow, today: string) => {
+        const rows = db.prepare('SELECT day, fed, auto_fed, snacks FROM pet_days WHERE pet_id = ? AND day > ? AND day <= ?')
+            .all(p.id, addDays(today, -7), today) as { day: string; fed: number; auto_fed: number; snacks: number }[];
+        const byDay = new Map(rows.map(r => [r.day, r]));
+        const first = (db.prepare('SELECT MIN(day) AS d FROM pet_days WHERE pet_id = ? AND (fed = 1 OR auto_fed = 1)').get(p.id) as { d: string | null }).d;
+        let score = 0;
+        for (let i = 6; i >= 0; i--) {
+            const d = addDays(today, -i), r = byDay.get(d);
+            const ate = !!(r?.fed || r?.auto_fed);
+            score += (r?.snacks ?? 0) * 0.5;
+            if (ate) score += 1;
+            else if (d === today) score += 0;
+            else if (!first || d < first) score += 1;
+            else score -= 1;
+        }
+        return score;
+    };
+    const buildOf = (score: number) => score <= 4 ? 'thin' : score <= 8 ? 'normal' : score <= 11 ? 'chubby' : 'fat';
+
     // ── 성장 ───────────────────────────────────
     /** 그날 치울 똥이 없었나: 0시~밤 9시 사이에 방에 똥이 하나도 없었다 (밤 9시 넘어 나온 똥은 다음 날 치우면 된다).
      *  자동 청소기가 치운 똥도 있던 똥으로 친다 (청소기는 청소한 날로 안 셈) */
@@ -411,6 +433,9 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                 auto_fed_today: !!d?.auto_fed,
                 patted_today: !!d?.patted,
                 fullness,
+                // 체형 thin 홀쭉 / normal 보통 / chubby 통통 / fat 뚱뚱 (알이면 null)
+                build: egg ? null : buildOf(buildScore(p, today)),
+                ...(tester && !egg ? { build_score: buildScore(p, today) } : {}),
                 poops: poops.filter(x => x.at <= now).map(({ id, u, v }) => ({ id, u, v })),
                 next_poop_at: poops.find(x => x.at > now)?.at ?? null,
                 next_change_at: nextAt.length ? Math.min(...nextAt) : null,

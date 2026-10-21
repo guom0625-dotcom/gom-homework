@@ -126,7 +126,7 @@ export function PetVisitScreen() {
             <PetScene viewOnly mode={mode} stage={pet.stage} roomLevel={data.room.level}
               poops={pet.poops} gone={gone}
               decor={{ items: data.items.filter(i => i.placed).map(i => i.key), wallpaper: data.decor.wallpaper, cushion: data.decor.cushion }}
-              robotCleaned={pet.robot_cleaned} outfit={pet.wear} species={pet.species} variant={pet.variant}
+              robotCleaned={pet.robot_cleaned} outfit={pet.wear} species={pet.species} variant={pet.variant} build={pet.build}
               placement={data.layout ?? {}} />
           </View>
         )}
