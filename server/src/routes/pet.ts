@@ -336,20 +336,21 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         'SELECT 1 FROM pet_poops WHERE pet_id = ? AND at < ? AND (cleaned_at IS NULL OR cleaned_at > ?) LIMIT 1',
     ).get(p.id, dayStart(d) + 21 * H, dayStart(d));
     // 지금 단계에서 한 날 수 - 빠진 날 / 2 (내림). 오늘은 아직 안 했어도 빠진 날로 치지 않는다
+    // 날짜 순서대로: 한 날 +1, 빠진 날 이틀마다 -1. 0일 때 빠진 날은 벌점 없음 — 마이너스가 쌓이지 않는다 (2026-10-21 사용자 결정).
+    // 오늘은 아직 안 했어도 빠진 날로 치지 않는다. 치울 똥이 없던 지난날은 청소한 날도 빠진 날도 아니다
     const progress = (p: PetRow, field: 'fed' | 'patted' | 'cleaned', today: string) => {
-        const done = (db.prepare(`SELECT COUNT(*) AS n FROM pet_days WHERE pet_id = ? AND day >= ? AND day <= ? AND ${field} = 1`)
-            .get(p.id, p.stage_day, today) as { n: number }).n;
-        const doneToday = !!db.prepare(`SELECT 1 FROM pet_days WHERE pet_id = ? AND day = ? AND ${field} = 1`).get(p.id, today);
-        // 치울 똥이 없던 지난날은 청소한 날도 빠진 날도 아니다 (2026-10-21 사용자 결정)
-        let free = 0;
-        if (field === 'cleaned') {
-            const cleaned = new Set((db.prepare('SELECT day FROM pet_days WHERE pet_id = ? AND day >= ? AND day < ? AND cleaned = 1')
-                .all(p.id, p.stage_day, today) as { day: string }[]).map(r => r.day));
-            for (let d = p.stage_day; d < today; d = addDays(d, 1)) if (!cleaned.has(d) && noPoopDay(p, d)) free++;
+        const doneDays = new Set((db.prepare(`SELECT day FROM pet_days WHERE pet_id = ? AND day >= ? AND day <= ? AND ${field} = 1`)
+            .all(p.id, p.stage_day, today) as { day: string }[]).map(r => r.day));
+        let have = 0, missed = 0, half = false;
+        for (let d = p.stage_day; d < today; d = addDays(d, 1)) {
+            if (doneDays.has(d)) { have++; continue; }
+            if (field === 'cleaned' && noPoopDay(p, d)) continue;
+            missed++;
+            if (have === 0) { half = false; continue; }      // 0이면 벌점 없음
+            if (half) { have--; half = false; } else half = true;
         }
-        const pastDays = Math.max(0, daysBetween(p.stage_day, today));          // 단계 시작일 ~ 어제
-        const missed = Math.max(0, pastDays - free - (done - (doneToday ? 1 : 0)));
-        return { have: Math.max(0, done - Math.floor(missed / 2)), missed };
+        if (doneDays.has(today)) have++;
+        return { have, missed };
     };
 
     const growth = (p: PetRow, today: string, room: number) => {
