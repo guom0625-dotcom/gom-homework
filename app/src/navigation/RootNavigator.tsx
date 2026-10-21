@@ -18,6 +18,7 @@ import { CatalogScreen } from '../screens/manager/CatalogScreen';
 import { DeadlineSettingsScreen } from '../screens/manager/DeadlineSettings';
 import { RewardUseScreen } from '../screens/manager/RewardUseScreen';
 import { SpendScreen } from '../screens/student/SpendScreen';
+import { PetVisitScreen } from '../screens/student/PetVisitScreen';
 import { BooksScreen } from '../screens/student/BooksScreen';
 import { BookRegisterScreen } from '../screens/student/BookRegister';
 import { BookReviewScreen } from '../screens/manager/BookReviewScreen';
@@ -38,6 +39,7 @@ export type StudentStackParams = {
     // task 가 있으면 반려된 계획을 고쳐서 다시 상신하는 수정 모드
     TaskRegister: { day: number; task?: { id: string; title: string; memo: string | null } };
     Spend: undefined;
+    PetVisit: undefined;
     Books: undefined;
     BookRegister: undefined;
     BookShelf: undefined;
@@ -67,6 +69,7 @@ function StudentNavigator() {
             <StudentStack.Screen name="TaskList" component={TaskListScreen} />
             <StudentStack.Screen name="TaskRegister" component={TaskRegisterScreen} />
             <StudentStack.Screen name="Spend" component={SpendScreen} />
+            <StudentStack.Screen name="PetVisit" component={PetVisitScreen} />
             <StudentStack.Screen name="Books" component={BooksScreen} />
             <StudentStack.Screen name="BookRegister" component={BookRegisterScreen} />
             <StudentStack.Screen name="BookShelf" component={BookShelfScreen} />
