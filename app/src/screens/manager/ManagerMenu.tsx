@@ -27,6 +27,8 @@ export function ManagerMenuScreen({ navigation }: Props) {
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [pushOn, setPushOn] = useState(true);
     const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+    // 학생 이름을 누르면 그 학생의 관리 항목(이름 바꾸기·재로그인 코드·삭제)이 펼쳐진다
+    const [openStudent, setOpenStudent] = useState<string | null>(null);
 
     useFocusEffect(useCallback(() => {
         api<OwnedReward[]>('/rewards?status=use_requested')
@@ -196,7 +198,19 @@ export function ManagerMenuScreen({ navigation }: Props) {
 
                 {students.map(st => (
                     <View key={st.id} style={styles.studentSection}>
-                        <Text style={styles.sectionTitle}>{st.name} · {formatDay(st.joined_day)} 가입</Text>
+                        <TouchableOpacity
+                            style={styles.item}
+                            activeOpacity={0.8}
+                            onPress={() => setOpenStudent(id => (id === st.id ? null : st.id))}
+                        >
+                            <Text style={styles.itemIcon}>👤</Text>
+                            <View style={styles.itemBody}>
+                                <Text style={styles.itemLabel}>{st.name}</Text>
+                                <Text style={styles.itemDesc}>{formatDay(st.joined_day)} 가입</Text>
+                            </View>
+                            <Text style={styles.chevron}>{openStudent === st.id ? '▾' : '▸'}</Text>
+                        </TouchableOpacity>
+                        {openStudent === st.id && (<View style={styles.studentActions}>
                         <MenuItem
                             icon="✏️"
                             label="이름 바꾸기"
@@ -217,6 +231,7 @@ export function ManagerMenuScreen({ navigation }: Props) {
                             loading={deletingId === st.id}
                             onPress={() => handleDeleteStudent(st.id, st.name)}
                         />
+                        </View>)}
                     </View>
                 ))}
 
@@ -301,6 +316,7 @@ const styles = StyleSheet.create({
     },
     list: { padding: 16, gap: 10 },
     studentSection: { gap: 10, marginTop: 14 },
+    studentActions: { gap: 10, paddingLeft: 16 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 },
     modalCard: { backgroundColor: colors.paper, borderRadius: radius.lg, padding: 20, gap: 14 },
     modalTitle: { fontFamily: fontFamilies.display, fontSize: fontSizes.xl, color: colors.ink[900], textAlign: 'center' },
