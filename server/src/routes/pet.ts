@@ -758,12 +758,14 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
             const shiftMs = (ms: number) => {
                 run('UPDATE pets SET sick_since = sick_since - ?, happy_until = happy_until - ?, last_fed_at = last_fed_at - ?, created_at = created_at - ? WHERE id = ?', ms, ms, ms, ms, p!.id);
                 run('UPDATE pet_poops SET at = at - ?, cleaned_at = cleaned_at - ? WHERE pet_id = ?', ms, ms, p!.id);
+                // 능력 물건은 꺼낸 시각부터 작동하므로 같이 옮긴다 (안 옮기면 지난 밤 급식기·청소기가 건너뛴다)
+                run('UPDATE pet_items SET placed_at = placed_at - ? WHERE student_id = ? AND placed_at IS NOT NULL', ms, studentId);
             };
             switch (parsed.data.action) {
                 case 'next_day': {
                     // 날짜 기록을 하루씩 과거로 (기본키가 겹치지 않게 두 번에 나눠서)
                     shiftMs(DAY);
-                    run("UPDATE pets SET stage_day = date(stage_day, '-1 day'), last_fed_day = date(last_fed_day, '-1 day'), helper_day = date(helper_day, '-1 day') WHERE id = ?", p.id);
+                    run("UPDATE pets SET stage_day = date(stage_day, '-1 day'), last_fed_day = date(last_fed_day, '-1 day'), helper_day = date(helper_day, '-1 day'), robot_day = date(robot_day, '-1 day') WHERE id = ?", p.id);
                     run("UPDATE pet_days SET day = 'x' || day WHERE pet_id = ?", p.id);
                     run("UPDATE pet_days SET day = date(substr(day, 2), '-1 day') WHERE pet_id = ?", p.id);
                     break;
