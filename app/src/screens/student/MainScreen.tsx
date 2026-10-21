@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, AppState, useWindowDimensions,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, AppState, useWindowDimensions, Linking, Alert,
   type AppStateStatus,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,6 +21,27 @@ import type { DayStatus, IslandState } from '../../lib/types';
 import type { StudentStackParams } from '../../navigation/RootNavigator';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore, canRegisterOn } from '../../store/appStore';
+import { api } from '../../api/client';
+
+// 펫 앱(gomTamagotchi) — 1회용 연결 코드를 받아 딥링크로 넘긴다. 펫 앱이 없으면 설치 페이지로.
+const PET_RELEASES = 'https://github.com/guom0625-dotcom/gom-tamagotchi/releases/latest';
+async function openPetApp() {
+  let code: string;
+  try {
+    ({ code } = await api<{ code: string }>('/auth/link-code', { method: 'POST', body: '{}' }));
+  } catch {
+    Alert.alert('펫 앱 열기', '서버에 연결하지 못했어요. 잠시 뒤에 다시 해 주세요.');
+    return;
+  }
+  try {
+    await Linking.openURL(`gomtamagotchi://link?code=${code}`);
+  } catch {
+    Alert.alert('🐣 펫 앱이 없어요', '펫 앱(gomTamagotchi)을 먼저 설치해 주세요.', [
+      { text: '닫기', style: 'cancel' },
+      { text: '설치하러 가기', onPress: () => { Linking.openURL(PET_RELEASES).catch(() => {}); } },
+    ]);
+  }
+}
 
 // 이번 달 섬 지도 — 한 줄에 COLS개씩 비스듬히 내려가다 끝에서 방향을 바꾸는 굽이길
 const COLS = 4;
@@ -267,6 +288,7 @@ export function MainScreen() {
             <SideButton icon="📋" label="목록" onPress={() => navigation.navigate('TaskList', { day: today })} />
             <SideButton icon="📚" label="책읽기" onPress={() => navigation.navigate('Books')} />
             <SideButton icon="🏠" label="내 방" onPress={() => navigation.navigate('MiniRoom')} />
+            <SideButton icon="🐣" label="펫" onPress={openPetApp} />
             <SideButton icon="💎" label="상점" onPress={() => navigation.navigate('Spend')} />
             <SideButton icon="⚙️" label="설정" onPress={() => navigation.navigate('Profile')} />
           </View>
