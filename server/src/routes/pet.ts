@@ -759,12 +759,16 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         return 'ok';
     }, { allowEgg: true });
 
-    // 졸업 (성인이 되면 아이가 누른다). 도감에 남기고 새 알을 무료로 받는다. 방·물건은 그대로
+    // 졸업 (성인이 되면 아이가 누른다). 도감에 남기고 새 알을 무료로 받는다.
+    // 방은 작은 방으로 돌아가고 물건은 가진 채로 모두 창고에 넣는다 (2026-10-21 사용자 결정). 자리도 기본 자리로
     action('/pet/graduate', null, (p, _b, { now, studentId }) => {
         if (p.stage !== 'adult') return 'not_adult';
         if (p.sick_since !== null) return 'sick';
         db.prepare("UPDATE pets SET status = 'graduated', graduated_at = ?, updated_at = ? WHERE id = ?").run(now, now, p.id);
         db.prepare('UPDATE pet_poops SET cleaned_at = ? WHERE pet_id = ? AND cleaned_at IS NULL').run(now, p.id);
+        ensureHome(studentId);
+        db.prepare('UPDATE pet_home SET room_level = 0, layout = NULL, updated_at = ? WHERE student_id = ?').run(now, studentId);
+        db.prepare('UPDATE pet_items SET placed = 0, placed_at = NULL WHERE student_id = ? AND placed = 1').run(studentId);
         newEgg(studentId);
         return 'ok';
     });
