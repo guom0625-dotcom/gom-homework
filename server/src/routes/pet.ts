@@ -450,6 +450,21 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         return db.transaction(() => withGems(req.user.id))();
     });
 
+    // GET /pet/student/:id — 엄마(매니저)가 자기 학생의 펫을 구경한다. 없으면 알을 만들지 않고 pet:null
+    app.get<{ Params: { id: string } }>('/pet/student/:id', { preHandler: auth }, async (req, reply) => {
+        if (req.user.role !== 'manager') return reply.code(403).send({ error: 'forbidden' });
+        const studentId = req.params.id;
+        const linked = db.prepare('SELECT 1 FROM manager_student_link WHERE manager_id = ? AND student_id = ?')
+            .get(req.user.id, studentId);
+        if (!linked) return reply.code(404).send({ error: 'not_found' });
+        return db.transaction(() => {
+            const row = db.prepare(`
+                SELECT * FROM pets WHERE student_id = ? AND status IN ('active', 'gone') ORDER BY created_at DESC LIMIT 1
+            `).get(studentId) as PetRow | undefined;
+            return row ? view(evaluate(row)) : { pet: null };
+        })();
+    });
+
     // 밥 (하루 1번, 🔶3)
     action('/pet/feed', null, (p, _b, { now, today, studentId }) => {
         const dr = dayRow(p, today);
