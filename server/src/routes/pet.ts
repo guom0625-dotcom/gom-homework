@@ -338,11 +338,15 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
     // 지금 단계에서 한 날 수 - 빠진 날 / 2 (내림). 오늘은 아직 안 했어도 빠진 날로 치지 않는다
     // 날짜 순서대로: 한 날 +1, 빠진 날 이틀마다 -1. 0일 때 빠진 날은 벌점 없음 — 마이너스가 쌓이지 않는다 (2026-10-21 사용자 결정).
     // 오늘은 아직 안 했어도 빠진 날로 치지 않는다. 치울 똥이 없던 지난날은 청소한 날도 빠진 날도 아니다
+    // 단계가 시작된 날(받은 날·깨어난 날)은 세지 않고 다음 날부터 센다 — 저녁에 받은 알이 다음 날 아침에 깨지 않게 (2026-10-22 사용자 결정)
+    const countFrom = (p: PetRow) => addDays(p.stage_day, 1);
     const progress = (p: PetRow, field: 'fed' | 'patted' | 'cleaned', today: string) => {
+        const from = countFrom(p);
+        if (from > today) return { have: 0, missed: 0 };
         const doneDays = new Set((db.prepare(`SELECT day FROM pet_days WHERE pet_id = ? AND day >= ? AND day <= ? AND ${field} = 1`)
-            .all(p.id, p.stage_day, today) as { day: string }[]).map(r => r.day));
+            .all(p.id, from, today) as { day: string }[]).map(r => r.day));
         let have = 0, missed = 0, half = false;
-        for (let d = p.stage_day; d < today; d = addDays(d, 1)) {
+        for (let d = from; d < today; d = addDays(d, 1)) {
             if (doneDays.has(d)) { have++; continue; }
             if (field === 'cleaned' && noPoopDay(p, d)) continue;
             missed++;
@@ -383,7 +387,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
     /** 돌봄 도우미로 지울 수 있는 가장 최근의 빠진 날 (단계 시작일 ~ 어제) */
     const lastMissedDay = (p: PetRow, today: string): string | null => {
         const fields = p.stage === 'egg' ? ['patted'] : ['fed', 'patted', 'cleaned'];
-        for (let d = prevDay(today); d >= p.stage_day; d = prevDay(d)) {
+        for (let d = prevDay(today); d >= countFrom(p); d = prevDay(d)) {
             const r = dayRow(p, d) as unknown as Record<string, number> | undefined;
             if (!r || fields.some(f => !r[f] && !(f === 'cleaned' && noPoopDay(p, d)))) return d;
         }
@@ -853,7 +857,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                 case 'fill': {
                     if (p.stage === 'adult') return 'adult';
                     const need = Math.max(...Object.entries(GROWTH[p.stage].need).filter(([k]) => k !== 'room').map(([, v]) => v!));
-                    const start = addDays(today, -need);
+                    const start = addDays(today, -need - 1);   // 시작한 날은 안 세므로 하루 더 앞으로
                     run('UPDATE pets SET stage_day = ? WHERE id = ?', start, p.id);
                     for (let d = start; d < today; d = addDays(d, 1)) {
                         run(`INSERT INTO pet_days (pet_id, student_id, day, fed, patted, cleaned) VALUES (?, ?, ?, 1, 1, 1)
