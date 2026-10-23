@@ -40,9 +40,10 @@ const DECOR: Record<string, number> = {
     cushion_blue: 10,                              // 쿠션 색
 };
 const HELPER_EVERY_DAYS = 7;
-// 미니게임 똥피하기 (2026-10-23 사용자 결정): 하루 5판, 점수는 버틴 시간, 순위는 서버 전체.
+// 미니게임 똥피하기 (2026-10-23 사용자 결정): 하루 5판 무료, 그 뒤로는 한 판 🔶1. 점수는 버틴 시간, 순위는 서버 전체.
 // 보상은 기분좋음만 (보석 없음). 지금 펫이나 도감의 펫으로만 할 수 있다
 const GAME_PER_DAY = 5;
+const GAME_PRICE = 1;
 const GAME_HAPPY_H = 3;
 const GAME_MAX_MS = 30 * 60_000;        // 이보다 오래된 판은 끝낼 수 없다
 const GAME_SLACK_MS = 2000;             // 점수가 실제 지난 시간보다 이만큼 넘으면 받지 않는다
@@ -854,8 +855,10 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         const mine = board.findIndex(r => r.student_id === studentId);
         const strip = ({ student_id, ...r }: typeof board[number]) => ({ ...r, me: student_id === studentId });
         return {
-            plays_left: Math.max(0, GAME_PER_DAY - gamePlays(studentId, today)),
+            plays_left: Math.max(0, GAME_PER_DAY - gamePlays(studentId, today)),   // 오늘 남은 무료 판
             plays_per_day: GAME_PER_DAY,
+            price: GAME_PRICE,                                                       // 무료 판을 다 쓰면 한 판 값
+            topaz: balance(studentId).topaz,
             best: mine >= 0 ? board[mine].score_ms : null,
             rank: mine >= 0 ? mine + 1 : null,
             players: board.length,
@@ -869,7 +872,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         return gameView(req.user.id);
     });
 
-    // POST /pet/game/start {pet_id} — 한 판 시작 (시작하면 판수가 줄어든다)
+    // POST /pet/game/start {pet_id} — 한 판 시작 (시작하면 무료 판이 줄고, 다 쓴 뒤에는 🔶1)
     app.post('/pet/game/start', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
         const parsed = GameStartBody.safeParse(req.body);
@@ -877,7 +880,6 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         const studentId = req.user.id;
         const r = db.transaction((): { error: string } | { id: string } => {
             const now = Date.now(), today = kstDay(now);
-            if (gamePlays(studentId, today) >= GAME_PER_DAY) return { error: 'no_plays_left' };
             const p = db.prepare('SELECT * FROM pets WHERE id = ? AND student_id = ?').get(parsed.data.pet_id, studentId) as PetRow | undefined;
             if (!p) return { error: 'not_found' };
             let stage: string, build: string;
@@ -892,6 +894,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                 stage = v.stage; build = v.build ?? 'normal';
             } else return { error: 'not_found' };
             const id = ulid();
+            if (gamePlays(studentId, today) >= GAME_PER_DAY && !spendTopaz(studentId, GAME_PRICE, 'pet_game', id)) return { error: 'insufficient_gems' };
             db.prepare(`INSERT INTO pet_games (id, student_id, pet_id, species, variant, stage, build, day, started_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, studentId, p.id, p.species, p.variant, stage, build, today, now);
             return { id };
