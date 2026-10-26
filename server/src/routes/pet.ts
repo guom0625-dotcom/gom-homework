@@ -47,6 +47,7 @@ const GAME_PRICE = 1;
 const GAME_HAPPY_H = 3;
 const GAME_MAX_MS = 30 * 60_000;        // 이보다 오래된 판은 끝낼 수 없다
 const GAME_SLACK_MS = 2000;             // 점수가 실제 지난 시간보다 이만큼 넘으면 받지 않는다
+const RUN_MAX_PER_S = 80;               // 달리기: 1초에 얻을 수 있는 가장 큰 점수 (거리 + 물고기)
 // 능력이 있는 물건 — 방에 꺼내 놓았을 때만 작동한다 (2026-10-20 사용자 결정)
 //  robot 자동 청소기: 똥이 나오고 12시간이 지나면 하루 1번 치운다 ('청소한 날'로는 세지 않는다)
 //  feeder 자동 급식기: 밥을 안 준 날 밤 9시에 밥을 준다 (🔶3 나감, '밥 준 날'로는 세지 않는다)
@@ -113,8 +114,10 @@ const CleanBody = z.object({ id: z.string().max(40).optional() }).optional();
 const ItemBody = z.object({ item: z.string().max(30) });
 const PlaceBody = z.object({ item: z.string().max(30), placed: z.boolean() });
 const TestBody = z.object({ action: z.string().max(30) });
-const GameStartBody = z.object({ pet_id: z.string().max(40) });
-const GameEndBody = z.object({ id: z.string().max(40), score_ms: z.number().int().min(0).max(3_600_000) });
+const GameKind = z.enum(['poop', 'run']).default('poop');   // 옛 앱은 kind 없이 보낸다 = 똥피하기
+const GameStartBody = z.object({ pet_id: z.string().max(40), kind: GameKind });
+// score_ms = 실제로 논 시간, score = 점수 (똥피하기는 안 보내도 된다 = score_ms)
+const GameEndBody = z.object({ id: z.string().max(40), score_ms: z.number().int().min(0).max(3_600_000), score: z.number().int().min(0).max(1_000_000).optional() });
 // 방 꾸미기: 옮길 수 있는 물건 (쿠션·밥그릇은 창고에 넣을 수 없지만 옮길 수는 있다). 커튼은 창문에 붙어 있어 빠진다
 const MOVABLE = new Set(['cushion', 'bowl', ...Object.keys(TOYS), ...Object.keys(GADGETS), 'rug', 'plant']);
 const LayoutBody = z.object({
@@ -837,21 +840,21 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
     // ── 미니게임 똥피하기 ─────────────────────────
     const gamePlays = (studentId: string, today: string) =>
         (db.prepare('SELECT COUNT(*) AS n FROM pet_games WHERE student_id = ? AND day = ?').get(studentId, today) as { n: number }).n;
-    /** 학생별 최고 기록 순위 (서버 전체) */
-    const gameBoard = () => db.prepare(`
-        SELECT g.student_id, u.name AS student, g.score_ms, g.species, g.variant, g.stage, p.name AS pet
+    /** 학생별 최고 기록 순위 (서버 전체, 게임 종류마다). score_ms 는 옛 앱(똥피하기 = 버틴 ms)을 위해 score 와 같은 값 */
+    const gameBoard = (kind: string) => db.prepare(`
+        SELECT g.student_id, u.name AS student, g.score, g.score AS score_ms, g.species, g.variant, g.stage, p.name AS pet
         FROM pet_games g
-        JOIN (SELECT student_id, MAX(score_ms) AS best FROM pet_games WHERE score_ms IS NOT NULL GROUP BY student_id) b
-          ON b.student_id = g.student_id AND b.best = g.score_ms
+        JOIN (SELECT student_id, MAX(score) AS best FROM pet_games WHERE kind = ? AND score IS NOT NULL GROUP BY student_id) b
+          ON b.student_id = g.student_id AND b.best = g.score
         JOIN users u ON u.id = g.student_id
         LEFT JOIN pets p ON p.id = g.pet_id
-        WHERE u.revoked_at IS NULL
+        WHERE u.revoked_at IS NULL AND g.kind = ?
         GROUP BY g.student_id
-        ORDER BY g.score_ms DESC, MIN(g.ended_at)
-    `).all() as { student_id: string; student: string; score_ms: number; species: string; variant: number; stage: string; pet: string | null }[];
-    const gameView = (studentId: string) => {
+        ORDER BY g.score DESC, MIN(g.ended_at)
+    `).all(kind, kind) as { student_id: string; student: string; score: number; score_ms: number; species: string; variant: number; stage: string; pet: string | null }[];
+    const gameView = (studentId: string, kind = 'poop') => {
         const today = kstDay();
-        const board = gameBoard();
+        const board = gameBoard(kind);
         const mine = board.findIndex(r => r.student_id === studentId);
         const strip = ({ student_id, ...r }: typeof board[number]) => ({ ...r, me: student_id === studentId });
         return {
@@ -859,20 +862,23 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
             plays_per_day: GAME_PER_DAY,
             price: GAME_PRICE,                                                       // 무료 판을 다 쓰면 한 판 값
             topaz: balance(studentId).topaz,
-            best: mine >= 0 ? board[mine].score_ms : null,
+            kind,
+            best: mine >= 0 ? board[mine].score : null,
             rank: mine >= 0 ? mine + 1 : null,
             players: board.length,
             top: board.slice(0, 10).map(strip),
         };
     };
 
-    // GET /pet/game — 남은 판수, 내 최고 기록, 순위 10등까지
-    app.get('/pet/game', { preHandler: auth }, async (req, reply) => {
+    // GET /pet/game?kind=poop|run — 남은 판수, 내 최고 기록, 순위 10등까지
+    app.get<{ Querystring: { kind?: string } }>('/pet/game', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
-        return gameView(req.user.id);
+        const kind = GameKind.safeParse(req.query.kind);
+        if (!kind.success) return reply.code(400).send({ error: 'invalid_kind' });
+        return gameView(req.user.id, kind.data);
     });
 
-    // POST /pet/game/start {pet_id} — 한 판 시작 (시작하면 무료 판이 줄고, 다 쓴 뒤에는 🔶1)
+    // POST /pet/game/start {pet_id, kind} — 한 판 시작 (시작하면 무료 판이 줄고, 다 쓴 뒤에는 🔶1)
     app.post('/pet/game/start', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
         const parsed = GameStartBody.safeParse(req.body);
@@ -895,31 +901,35 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
             } else return { error: 'not_found' };
             const id = ulid();
             if (gamePlays(studentId, today) >= GAME_PER_DAY && !spendTopaz(studentId, GAME_PRICE, 'pet_game', id)) return { error: 'insufficient_gems' };
-            db.prepare(`INSERT INTO pet_games (id, student_id, pet_id, species, variant, stage, build, day, started_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, studentId, p.id, p.species, p.variant, stage, build, today, now);
+            db.prepare(`INSERT INTO pet_games (id, student_id, pet_id, species, variant, stage, build, day, started_at, kind)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, studentId, p.id, p.species, p.variant, stage, build, today, now, parsed.data.kind);
             return { id };
         })();
         if ('error' in r) return reply.code(409).send(r);
-        return { game: r, ...gameView(studentId) };
+        return { game: r, ...gameView(studentId, parsed.data.kind) };
     });
 
-    // POST /pet/game/end {id, score_ms} — 점수 기록. 지금 키우는 펫이 기분좋음 (보석은 없음)
+    // POST /pet/game/end {id, score_ms, score?} — 점수 기록. 지금 키우는 펫이 기분좋음 (보석은 없음)
     app.post('/pet/game/end', { preHandler: auth }, async (req, reply) => {
         if (req.user.role !== 'student') return reply.code(403).send({ error: 'forbidden' });
         const parsed = GameEndBody.safeParse(req.body);
         if (!parsed.success) return reply.code(400).send({ error: 'invalid_body' });
         const studentId = req.user.id;
+        let kind = 'poop';
         const r = db.transaction((): string => {
             const now = Date.now();
             const g = db.prepare('SELECT * FROM pet_games WHERE id = ? AND student_id = ?').get(parsed.data.id, studentId) as
-                { started_at: number; ended_at: number | null } | undefined;
+                { started_at: number; ended_at: number | null; kind: string } | undefined;
             if (!g) return 'not_found';
+            kind = g.kind;
             if (g.ended_at !== null) return 'already_ended';
             if (now - g.started_at > GAME_MAX_MS) return 'expired';
             // 실제로 지난 시간보다 오래 버틸 수는 없다
             if (parsed.data.score_ms > now - g.started_at + GAME_SLACK_MS) return 'bad_score';
-            const score = parsed.data.score_ms;
-            db.prepare('UPDATE pet_games SET ended_at = ?, score_ms = ? WHERE id = ?').run(now, score, parsed.data.id);
+            // 똥피하기 점수는 버틴 시간. 달리기는 거리 + 물고기 — 논 시간에 비해 너무 크면 받지 않는다
+            const score = g.kind === 'poop' ? parsed.data.score_ms : (parsed.data.score ?? 0);
+            if (g.kind !== 'poop' && score > (parsed.data.score_ms / 1000) * RUN_MAX_PER_S + 50) return 'bad_score';
+            db.prepare('UPDATE pet_games SET ended_at = ?, score_ms = ?, score = ? WHERE id = ?').run(now, parsed.data.score_ms, score, parsed.data.id);
             // 기분좋음: 키우는 펫(알·떠남 제외)
             const p = db.prepare(`SELECT * FROM pets WHERE student_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`).get(studentId) as PetRow | undefined;
             if (p && p.stage !== 'egg') {
@@ -929,7 +939,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
             return 'ok';
         })();
         if (r !== 'ok') return reply.code(409).send({ error: r });
-        return gameView(studentId);
+        return gameView(studentId, kind);
     });
 
     // 시험 기능 {action} — PET_TEST_STUDENTS 에 있는 학생만
