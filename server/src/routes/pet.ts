@@ -41,7 +41,7 @@ const DECOR: Record<string, number> = {
 };
 const HELPER_EVERY_DAYS = 7;
 // 미니게임 (2026-10-23 사용자 결정): 하루 5판 무료, 그 뒤로는 한 판 🔶1. 순위는 서버 전체.
-// 2026-10-29: 똥피하기는 앱에서 뺐다(옛 앱 호환으로 서버는 받아 준다). 숲길 달리기는 "산책하기"로 하루 필수 돌봄
+// 2026-10-29: 똥피하기는 없앴다(기록도 지움, 새로 시작 못 함). 숲길 달리기는 "산책하기"로 하루 필수 돌봄 — 순위·최고 기록은 그대로
 // 보상은 기분좋음만 (보석 없음). 지금 펫이나 도감의 펫으로만 할 수 있다
 const GAME_PER_DAY = 5;
 const GAME_PRICE = 1;
@@ -900,6 +900,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         const parsed = GameStartBody.safeParse(req.body);
         if (!parsed.success) return reply.code(400).send({ error: 'invalid_body' });
         const studentId = req.user.id;
+        // 똥피하기는 2026-10-29 없앴다 (기록도 지움). 옛 앱이 시작하려 하면 막는다
+        if (parsed.data.kind === 'poop') return reply.code(409).send({ error: 'game_removed' });
         const r = db.transaction((): { error: string } | { id: string } => {
             const now = Date.now(), today = kstDay(now);
             const p = db.prepare('SELECT * FROM pets WHERE id = ? AND student_id = ?').get(parsed.data.pet_id, studentId) as PetRow | undefined;
