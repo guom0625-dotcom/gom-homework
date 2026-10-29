@@ -52,6 +52,7 @@ function todoList(r: PetResponse): string[] {
   if (!p.fed_today && !p.auto_fed_today) list.push('🍚 밥');
   if (p.poops.length > 0) list.push(`💩 똥 ${p.poops.length}개`);
   if (!p.patted_today) list.push('🤚 쓰다듬기');
+  if (!p.walked_today && !p.health) list.push('🌲 산책');
   if (r.room.can_upgrade) list.push('🏠 방 넓혀 주기');
   if (p.growth.ready) list.push('✨ 성장시키기');
   return list;
