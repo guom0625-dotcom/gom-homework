@@ -85,7 +85,7 @@ const VARIANTS: Record<string, number> = { bear: 4, dog: 5, cat: 5, rabbit: 4, s
 const HATCHABLE = Object.keys(VARIANTS);
 type Cond = 'feed' | 'pat' | 'clean' | 'walk' | 'room';
 // 다음 단계로 가는 조건. feed·pat·clean·walk 는 지금 단계의 누적 일수, room 은 방 크기
-// walk 산책 = 숲길 달리기를 지금 펫과 한 판 (2026-10-29 사용자 결정으로 하루 필수에 추가)
+// walk 산책 = 그날 지금 펫과 숲길 달리기 점수 합이 WALK_GOAL 이상 (2026-10-29 사용자 결정으로 하루 필수에 추가)
 const GROWTH: Record<Exclude<Stage, 'adult'>, { next: Stage; need: Partial<Record<Cond, number>> }> = {
     // 알 2일 + 유아 7일 + 청소년 15일 → 성인이 되면 졸업해서 도감에 남긴다 (2026-10-21 사용자 결정)
     egg: { next: 'baby', need: { pat: 2 } },
@@ -94,6 +94,8 @@ const GROWTH: Record<Exclude<Stage, 'adult'>, { next: Stage; need: Partial<Recor
 };
 /** 산책을 세기 시작한 날. 그 전 날은 산책한 날로 친다 (산책이 생기기 전이라 아이가 몰랐다) */
 const WALK_FROM = '2026-10-30';
+/** 산책 하루 목표: 그날 지금 펫과 달린 점수를 다 더해 이만큼 넘어야 산책한 날 (2026-10-29 사용자 결정) */
+const WALK_GOAL = 5000;
 
 interface PetRow {
     id: string; student_id: string; species: string; name: string | null; status: string;
@@ -210,6 +212,11 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
 
     const dayRow = (p: PetRow, day: string) =>
         db.prepare('SELECT fed, patted, cleaned, walked, snacks, hospital, auto_fed FROM pet_days WHERE pet_id = ? AND day = ?').get(p.id, day) as DayRow | undefined;
+
+    /** 그날 이 펫과 달린 숲길 달리기 점수 합 (산책 미션) */
+    const walkScore = (petId: string, day: string) => (db.prepare(
+        "SELECT COALESCE(SUM(score), 0) AS s FROM pet_games WHERE pet_id = ? AND kind = 'run' AND day = ? AND score IS NOT NULL",
+    ).get(petId, day) as { s: number }).s;
 
     const markDay = (p: PetRow, field: 'fed' | 'patted' | 'cleaned' | 'walked' | 'hospital', day: string) => {
         db.prepare(`
@@ -455,7 +462,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                 fed_today: !!d?.fed || !!d?.auto_fed,
                 auto_fed_today: !!d?.auto_fed,
                 patted_today: !!d?.patted,
-                walked_today: !!d?.walked,   // 오늘 산책 (숲길 달리기를 지금 펫과)
+                walked_today: !!d?.walked,   // 오늘 산책 미션 성공 (숲길 달리기 점수 합 ≥ 목표)
+                walk: { score: walkScore(p.id, today), goal: WALK_GOAL },
                 fullness,
                 // 체형 thin 홀쭉 / normal 보통 / chubby 통통 / fat 뚱뚱 (알이면 null)
                 build: egg ? null : buildOf(buildScore(p, today)),
@@ -927,7 +935,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         const r = db.transaction((): string => {
             const now = Date.now();
             const g = db.prepare('SELECT * FROM pet_games WHERE id = ? AND student_id = ?').get(parsed.data.id, studentId) as
-                { started_at: number; ended_at: number | null; kind: string; pet_id: string } | undefined;
+                { started_at: number; ended_at: number | null; kind: string; pet_id: string; day: string } | undefined;
             if (!g) return 'not_found';
             kind = g.kind;
             if (g.ended_at !== null) return 'already_ended';
@@ -943,8 +951,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
             if (p && p.stage !== 'egg') {
                 db.prepare('UPDATE pets SET happy_until = ?, updated_at = ? WHERE id = ?')
                     .run(Math.max(p.happy_until ?? 0, now + GAME_HAPPY_H * H), now, p.id);
-                // 산책: 숲길 달리기를 지금 키우는 펫과 했으면 오늘 산책한 날 (도감 친구와 한 건 안 셈)
-                if (g.kind === 'run' && g.pet_id === p.id) markDay(p, 'walked', kstDay(now));
+                // 산책: 그날 지금 키우는 펫과 달린 점수 합이 목표를 넘으면 산책한 날 (도감 친구와 한 건 안 셈)
+                if (g.kind === 'run' && g.pet_id === p.id && walkScore(p.id, g.day) >= WALK_GOAL) markDay(p, 'walked', g.day);
             }
             return 'ok';
         })();
