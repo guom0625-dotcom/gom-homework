@@ -49,6 +49,10 @@ const GAME_HAPPY_H = 3;
 const GAME_MAX_MS = 30 * 60_000;        // 이보다 오래된 판은 끝낼 수 없다
 const GAME_SLACK_MS = 2000;             // 점수가 실제 지난 시간보다 이만큼 넘으면 받지 않는다
 const RUN_MAX_PER_S = 80;               // 달리기: 1초에 얻을 수 있는 가장 큰 점수 (거리 + 물고기)
+// 🐍 놀아주기 = 뱀 게임 (2026-11-03 사용자 결정): 하루 필수, 시작만 하면 놀아준 날(점수 기준 없음).
+// 하루 첫 판 무료, 그 뒤로 한 판 🔶1. 판 수는 산책(달리기)과 따로 센다
+const SNAKE_PER_DAY = 1;
+const SNAKE_MAX_PER_S = 15;             // 뱀: 1초에 먹을 수 있는 가장 많은 사과 (넉넉히)
 // 능력이 있는 물건 — 방에 꺼내 놓았을 때만 작동한다 (2026-10-20 사용자 결정)
 //  robot 자동 청소기: 똥이 나오고 12시간이 지나면 하루 1번 치운다 ('청소한 날'로는 세지 않는다)
 //  feeder 자동 급식기: 밥을 안 준 날 밤 9시에 밥을 준다 (🔶3 나감, '밥 준 날'로는 세지 않는다)
@@ -83,17 +87,22 @@ type Stage = 'egg' | 'baby' | 'teen' | 'adult';
 // 앱에 그림이 있는 종류만 알에서 나온다. 값은 털색·무늬 가짓수 (앱 src/pet/species.ts 의 looks 개수와 맞출 것)
 const VARIANTS: Record<string, number> = { bear: 4, dog: 5, cat: 5, rabbit: 4, squirrel: 2, hamster: 4 };
 const HATCHABLE = Object.keys(VARIANTS);
-type Cond = 'feed' | 'pat' | 'clean' | 'walk' | 'room';
+type Cond = 'feed' | 'pat' | 'clean' | 'walk' | 'play' | 'room';
 // 다음 단계로 가는 조건. feed·pat·clean·walk 는 지금 단계의 누적 일수, room 은 방 크기
 // walk 산책 = 그날 지금 펫과 숲길 달리기 점수 합이 WALK_GOAL 이상 (2026-10-29 사용자 결정으로 하루 필수에 추가)
+// play 놀아주기 = 그날 지금 펫과 뱀 게임을 한 판 시작 (2026-11-03 사용자 결정)
 const GROWTH: Record<Exclude<Stage, 'adult'>, { next: Stage; need: Partial<Record<Cond, number>> }> = {
     // 알 2일 + 유아 7일 + 청소년 15일 → 성인이 되면 졸업해서 도감에 남긴다 (2026-10-21 사용자 결정)
     egg: { next: 'baby', need: { pat: 2 } },
-    baby: { next: 'teen', need: { feed: 7, pat: 7, clean: 7, walk: 7, room: 1 } },
-    teen: { next: 'adult', need: { feed: 15, pat: 15, clean: 15, walk: 15, room: 2 } },
+    baby: { next: 'teen', need: { feed: 7, pat: 7, clean: 7, walk: 7, play: 7, room: 1 } },
+    teen: { next: 'adult', need: { feed: 15, pat: 15, clean: 15, walk: 15, play: 15, room: 2 } },
 };
 /** 산책을 세기 시작한 날. 그 전 날은 산책한 날로 친다 (산책이 생기기 전이라 아이가 몰랐다) */
 const WALK_FROM = '2026-10-30';
+/** 놀아주기를 세기 시작한 날. 그 전 날은 놀아 준 날로 친다 */
+const PLAY_FROM = '2026-11-04';
+/** 새로 생긴 하루 돌봄은 생기기 전 날을 한 날로 친다 */
+const before = (field: string, d: string) => (field === 'walked' && d < WALK_FROM) || (field === 'played' && d < PLAY_FROM);
 /** 산책 하루 목표: 그날 지금 펫과 달린 점수를 다 더해 이만큼 넘어야 산책한 날 (2026-10-29 사용자 결정) */
 const WALK_GOAL = 5000;
 
@@ -104,7 +113,7 @@ interface PetRow {
     helper_day: string | null; gone_at: number | null; gone_reason: string | null; robot_day: string | null;
     wear_top: string | null; wear_hat: string | null; variant: number;
 }
-interface DayRow { fed: number; patted: number; cleaned: number; walked: number; snacks: number; hospital: number; auto_fed: number }
+interface DayRow { fed: number; patted: number; cleaned: number; walked: number; played: number; snacks: number; hospital: number; auto_fed: number }
 
 /** 한국 날짜 'YYYY-MM-DD' */
 export const kstDay = (ms = Date.now()) => new Date(ms + 9 * H).toISOString().slice(0, 10);
@@ -120,7 +129,7 @@ const CleanBody = z.object({ id: z.string().max(40).optional() }).optional();
 const ItemBody = z.object({ item: z.string().max(30) });
 const PlaceBody = z.object({ item: z.string().max(30), placed: z.boolean() });
 const TestBody = z.object({ action: z.string().max(30) });
-const GameKind = z.enum(['poop', 'run']).default('poop');   // 옛 앱은 kind 없이 보낸다 = 똥피하기
+const GameKind = z.enum(['poop', 'run', 'snake']).default('poop');   // 옛 앱은 kind 없이 보낸다 = 똥피하기
 const GameStartBody = z.object({ pet_id: z.string().max(40), kind: GameKind });
 // score_ms = 실제로 논 시간, score = 점수 (똥피하기는 안 보내도 된다 = score_ms)
 const GameEndBody = z.object({ id: z.string().max(40), score_ms: z.number().int().min(0).max(3_600_000), score: z.number().int().min(0).max(1_000_000).optional() });
@@ -211,14 +220,14 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
     };
 
     const dayRow = (p: PetRow, day: string) =>
-        db.prepare('SELECT fed, patted, cleaned, walked, snacks, hospital, auto_fed FROM pet_days WHERE pet_id = ? AND day = ?').get(p.id, day) as DayRow | undefined;
+        db.prepare('SELECT fed, patted, cleaned, walked, played, snacks, hospital, auto_fed FROM pet_days WHERE pet_id = ? AND day = ?').get(p.id, day) as DayRow | undefined;
 
     /** 그날 이 펫과 달린 숲길 달리기 점수 합 (산책 미션) */
     const walkScore = (petId: string, day: string) => (db.prepare(
         "SELECT COALESCE(SUM(score), 0) AS s FROM pet_games WHERE pet_id = ? AND kind = 'run' AND day = ? AND score IS NOT NULL",
     ).get(petId, day) as { s: number }).s;
 
-    const markDay = (p: PetRow, field: 'fed' | 'patted' | 'cleaned' | 'walked' | 'hospital', day: string) => {
+    const markDay = (p: PetRow, field: 'fed' | 'patted' | 'cleaned' | 'walked' | 'played' | 'hospital', day: string) => {
         db.prepare(`
             INSERT INTO pet_days (pet_id, student_id, day, ${field}) VALUES (?, ?, ?, 1)
             ON CONFLICT (pet_id, day) DO UPDATE SET ${field} = 1
@@ -363,15 +372,15 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
     // 오늘은 아직 안 했어도 빠진 날로 치지 않는다. 치울 똥이 없던 지난날은 청소한 날도 빠진 날도 아니다
     // 단계가 시작된 날(받은 날·깨어난 날)은 세지 않고 다음 날부터 센다 — 저녁에 받은 알이 다음 날 아침에 깨지 않게 (2026-10-22 사용자 결정)
     const countFrom = (p: PetRow) => addDays(p.stage_day, 1);
-    // 산책은 WALK_FROM 전 날을 한 날로 친다
-    const progress = (p: PetRow, field: 'fed' | 'patted' | 'cleaned' | 'walked', today: string) => {
+    // 산책·놀아주기는 생기기 전 날(WALK_FROM·PLAY_FROM)을 한 날로 친다
+    const progress = (p: PetRow, field: 'fed' | 'patted' | 'cleaned' | 'walked' | 'played', today: string) => {
         const from = countFrom(p);
         if (from > today) return { have: 0, missed: 0 };
         const doneDays = new Set((db.prepare(`SELECT day FROM pet_days WHERE pet_id = ? AND day >= ? AND day <= ? AND ${field} = 1`)
             .all(p.id, from, today) as { day: string }[]).map(r => r.day));
         let have = 0, missed = 0, half = false;
         for (let d = from; d < today; d = addDays(d, 1)) {
-            if (doneDays.has(d) || (field === 'walked' && d < WALK_FROM)) { have++; continue; }
+            if (doneDays.has(d) || before(field, d)) { have++; continue; }
             if (field === 'cleaned' && noPoopDay(p, d)) continue;
             missed++;
             if (have === 0) { half = false; continue; }      // 0이면 벌점 없음
@@ -387,6 +396,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         const prog: Record<Cond, { have: number; missed: number }> = {
             feed: progress(p, 'fed', today), pat: progress(p, 'patted', today), clean: progress(p, 'cleaned', today),
             walk: progress(p, 'walked', today),
+            play: progress(p, 'played', today),
             room: { have: room, missed: 0 },
         };
         const conds = (Object.keys(g.need) as Cond[]).map(key => ({
@@ -411,10 +421,10 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
 
     /** 돌봄 도우미로 지울 수 있는 가장 최근의 빠진 날 (단계 시작일 ~ 어제) */
     const lastMissedDay = (p: PetRow, today: string): string | null => {
-        const fields = p.stage === 'egg' ? ['patted'] : ['fed', 'patted', 'cleaned', 'walked'];
+        const fields = p.stage === 'egg' ? ['patted'] : ['fed', 'patted', 'cleaned', 'walked', 'played'];
         for (let d = prevDay(today); d >= countFrom(p); d = prevDay(d)) {
             const r = dayRow(p, d) as unknown as Record<string, number> | undefined;
-            if (!r || fields.some(f => !r[f] && !(f === 'cleaned' && noPoopDay(p, d)) && !(f === 'walked' && d < WALK_FROM))) return d;
+            if (!r || fields.some(f => !r[f] && !(f === 'cleaned' && noPoopDay(p, d)) && !before(f, d))) return d;
         }
         return null;
     };
@@ -464,6 +474,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                 patted_today: !!d?.patted,
                 walked_today: !!d?.walked,   // 오늘 산책 미션 성공 (숲길 달리기 점수 합 ≥ 목표)
                 walk: { score: walkScore(p.id, today), goal: WALK_GOAL },
+                played_today: !!d?.played,   // 오늘 놀아주기(뱀 게임 한 판) 했나
                 fullness,
                 // 체형 thin 홀쭉 / normal 보통 / chubby 통통 / fat 뚱뚱 (알이면 null)
                 build: egg ? null : buildOf(buildScore(p, today)),
@@ -773,6 +784,7 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
             if (p.poops.length) asks.push(`💩 똥 ${p.poops.length}개 치우기`);
             if (!p.patted_today) asks.push('🤚 쓰다듬기');
             if (!p.walked_today && !p.health) asks.push('🌲 산책하기');
+            if (!p.played_today && !p.health) asks.push('🐍 놀아주기');
             if (v.room.can_upgrade) asks.push('🏠 방 넓혀 주기');
             if (p.growth.ready) asks.push('✨ 성장시키기');
         }
@@ -822,8 +834,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         if (!day) return 'no_missed_day';
         if (!spendTopaz(studentId, PRICES.helper, 'pet_helper', day)) return 'insufficient_gems';
         db.prepare(`
-            INSERT INTO pet_days (pet_id, student_id, day, fed, patted, cleaned, walked, helped) VALUES (?, ?, ?, 1, 1, 1, 1, 1)
-            ON CONFLICT (pet_id, day) DO UPDATE SET fed = 1, patted = 1, cleaned = 1, walked = 1, helped = 1
+            INSERT INTO pet_days (pet_id, student_id, day, fed, patted, cleaned, walked, played, helped) VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1)
+            ON CONFLICT (pet_id, day) DO UPDATE SET fed = 1, patted = 1, cleaned = 1, walked = 1, played = 1, helped = 1
         `).run(p.id, p.student_id, day);
         db.prepare('UPDATE pets SET helper_day = ? WHERE id = ?').run(today, p.id);
         return 'ok';
@@ -854,8 +866,11 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
     }, { allowGone: true, allowEgg: true });
 
     // ── 미니게임 (산책 = 숲길 달리기) ─────────────────────────
-    const gamePlays = (studentId: string, today: string) =>
-        (db.prepare('SELECT COUNT(*) AS n FROM pet_games WHERE student_id = ? AND day = ?').get(studentId, today) as { n: number }).n;
+    /** 오늘 한 판 수. 뱀(놀아주기)은 따로, 나머지(달리기·옛 똥피하기)는 같이 센다 */
+    const gamePlays = (studentId: string, today: string, kind: string) => (db.prepare(
+        `SELECT COUNT(*) AS n FROM pet_games WHERE student_id = ? AND day = ? AND ${kind === 'snake' ? "kind = 'snake'" : "kind != 'snake'"}`,
+    ).get(studentId, today) as { n: number }).n;
+    const perDay = (kind: string) => kind === 'snake' ? SNAKE_PER_DAY : GAME_PER_DAY;
     /** 학생별 최고 기록 순위 (서버 전체, 게임 종류마다). score_ms 는 옛 앱(똥피하기 = 버틴 ms)을 위해 score 와 같은 값 */
     const gameBoard = (kind: string) => db.prepare(`
         SELECT g.student_id, u.name AS student, g.score, g.score AS score_ms, g.species, g.variant, g.stage, p.name AS pet
@@ -874,8 +889,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
         const mine = board.findIndex(r => r.student_id === studentId);
         const strip = ({ student_id, ...r }: typeof board[number]) => ({ ...r, me: student_id === studentId });
         return {
-            plays_left: Math.max(0, GAME_PER_DAY - gamePlays(studentId, today)),   // 오늘 남은 무료 판
-            plays_per_day: GAME_PER_DAY,
+            plays_left: Math.max(0, perDay(kind) - gamePlays(studentId, today, kind)),   // 오늘 남은 무료 판
+            plays_per_day: perDay(kind),
             price: GAME_PRICE,                                                       // 무료 판을 다 쓰면 한 판 값
             topaz: balance(studentId).topaz,
             kind,
@@ -918,9 +933,12 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                 stage = v.stage; build = v.build ?? 'normal';
             } else return { error: 'not_found' };
             const id = ulid();
-            if (gamePlays(studentId, today) >= GAME_PER_DAY && !spendTopaz(studentId, GAME_PRICE, 'pet_game', id)) return { error: 'insufficient_gems' };
+            const kind = parsed.data.kind;
+            if (gamePlays(studentId, today, kind) >= perDay(kind) && !spendTopaz(studentId, GAME_PRICE, 'pet_game', id)) return { error: 'insufficient_gems' };
             db.prepare(`INSERT INTO pet_games (id, student_id, pet_id, species, variant, stage, build, day, started_at, kind)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, studentId, p.id, p.species, p.variant, stage, build, today, now, parsed.data.kind);
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, studentId, p.id, p.species, p.variant, stage, build, today, now, kind);
+            // 놀아주기: 지금 키우는 펫과 뱀 게임을 시작하면 그날 놀아 준 날 (점수 기준 없음)
+            if (kind === 'snake' && p.status === 'active') markDay(p, 'played', today);
             return { id };
         })();
         if ('error' in r) return reply.code(409).send(r);
@@ -946,7 +964,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
             if (parsed.data.score_ms > now - g.started_at + GAME_SLACK_MS) return 'bad_score';
             // 똥피하기 점수는 버틴 시간. 달리기는 거리 + 물고기 — 논 시간에 비해 너무 크면 받지 않는다
             const score = g.kind === 'poop' ? parsed.data.score_ms : (parsed.data.score ?? 0);
-            if (g.kind !== 'poop' && score > (parsed.data.score_ms / 1000) * RUN_MAX_PER_S + 50) return 'bad_score';
+            if (g.kind === 'run' && score > (parsed.data.score_ms / 1000) * RUN_MAX_PER_S + 50) return 'bad_score';
+            if (g.kind === 'snake' && score > (parsed.data.score_ms / 1000) * SNAKE_MAX_PER_S + 5) return 'bad_score';
             db.prepare('UPDATE pet_games SET ended_at = ?, score_ms = ?, score = ? WHERE id = ?').run(now, parsed.data.score_ms, score, parsed.data.id);
             // 기분좋음: 키우는 펫(알·떠남 제외)
             const p = db.prepare(`SELECT * FROM pets WHERE student_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`).get(studentId) as PetRow | undefined;
@@ -997,8 +1016,8 @@ export function registerPetRoutes(app: FastifyInstance, db: Db, auth: AuthHandle
                     const start = addDays(today, -need - 1);   // 시작한 날은 안 세므로 하루 더 앞으로
                     run('UPDATE pets SET stage_day = ? WHERE id = ?', start, p.id);
                     for (let d = start; d < today; d = addDays(d, 1)) {
-                        run(`INSERT INTO pet_days (pet_id, student_id, day, fed, patted, cleaned, walked) VALUES (?, ?, ?, 1, 1, 1, 1)
-                             ON CONFLICT (pet_id, day) DO UPDATE SET fed = 1, patted = 1, cleaned = 1, walked = 1`, p.id, studentId, d);
+                        run(`INSERT INTO pet_days (pet_id, student_id, day, fed, patted, cleaned, walked, played) VALUES (?, ?, ?, 1, 1, 1, 1, 1)
+                             ON CONFLICT (pet_id, day) DO UPDATE SET fed = 1, patted = 1, cleaned = 1, walked = 1, played = 1`, p.id, studentId, d);
                     }
                     if (p.stage !== 'egg' && !p.last_fed_day) run('UPDATE pets SET last_fed_day = ? WHERE id = ?', addDays(today, -1), p.id);
                     break;
