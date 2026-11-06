@@ -68,6 +68,12 @@ export function ApprovalScreen({ navigation, route }: Props) {
             if (!map.has(t.day)) map.set(t.day, []);
             map.get(t.day)!.push(t);
         });
+        // 할일이 없는 날도 끼워 넣는다 — 빠진 날이 안 보이면 연속으로 성공한 것처럼 보인다.
+        // 보는 범위: 오늘 ~ from (더 앞 기록이 없으면 처음 할일을 만든 날까지만 — 가입 전 날은 안 넣는다)
+        const today = todayKST();
+        const days = [...map.keys()];
+        const oldest = selectedOlderDay == null && days.length ? Math.max(from, Math.min(...days)) : from;
+        for (let d = today; d >= oldest; d = addDays(d, -1)) if (!map.has(d)) map.set(d, []);
         return Array.from(map.entries())
             .sort(([a], [b]) => b - a)  // 최근 날짜가 위로
             .map(([day, tasks]) => {
@@ -79,10 +85,10 @@ export function ApprovalScreen({ navigation, route }: Props) {
                     day,
                     tasks: sorted,
                     pendingCount: tasks.filter(isPending).length,
-                    allDone: tasks.every(t => t.status === 'approved'),
+                    allDone: tasks.length > 0 && tasks.every(t => t.status === 'approved'),
                 };
             });
-    }, [selectedStudentTasks]);
+    }, [selectedStudentTasks, selectedOlderDay, from]);
 
     const totalPending = dayGroups.reduce((s, g) => s + g.pendingCount, 0);
 
@@ -199,13 +205,30 @@ export function ApprovalScreen({ navigation, route }: Props) {
                 contentContainerStyle={styles.list}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
             >
-                {dayGroups.length === 0 && (
+                {selectedStudentTasks.length === 0 && (
                     <View style={styles.empty}>
                         <Text style={styles.emptyText}>할일이 없어요</Text>
                     </View>
                 )}
                 {dayGroups.map(group => {
                     const expanded = expandedDays.has(group.day);
+                    const open = isDayOpen(group.day, completeDeadlineMin);
+                    // 실패한 날: 할일을 하나도 안 만든 지난 날, 또는 마감까지 다 못 끝낸 날
+                    const failed = !open && !group.allDone && group.pendingCount === 0;
+                    if (group.tasks.length === 0) {
+                        // 할일은 그날만 등록할 수 있으니, 오늘이 아니면 더는 만들 수 없다
+                        const isToday = group.day === todayKST();
+                        return (
+                            <View key={group.day} style={[styles.dayHeader, !isToday && styles.dayHeaderFail]}>
+                                <View style={styles.dayHeaderLeft}>
+                                    <Text style={styles.dayLabel}>{formatDay(group.day)}</Text>
+                                    <Text style={[styles.daySummary, !isToday && styles.daySummaryFail]}>
+                                        {isToday ? '아직 할일 없음' : '❌ 실패 · 할일을 만들지 않았어요'}
+                                    </Text>
+                                </View>
+                            </View>
+                        );
+                    }
                     return (
                         <View key={group.day} style={styles.daySection}>
                             {/* Day 헤더 */}
@@ -214,6 +237,7 @@ export function ApprovalScreen({ navigation, route }: Props) {
                                 style={[
                                     styles.dayHeader,
                                     group.pendingCount > 0 && styles.dayHeaderPending,
+                                    failed && styles.dayHeaderFail,
                                     expanded && styles.dayHeaderExpanded,
                                 ]}
                                 onPress={() => toggleDay(group.day)}
@@ -224,6 +248,7 @@ export function ApprovalScreen({ navigation, route }: Props) {
                                         styles.daySummary,
                                         group.pendingCount > 0 ? styles.daySummaryPending
                                             : group.allDone ? styles.daySummaryDone
+                                            : failed ? styles.daySummaryFail
                                             : null,
                                     ]}>
                                         {group.pendingCount > 0
@@ -231,9 +256,9 @@ export function ApprovalScreen({ navigation, route }: Props) {
                                             : group.allDone
                                                 ? `✅ 완료 ${group.tasks.length}개`
                                                 // 완료 마감이 지난 날은 더 진행할 수 없으니 결과로 보여준다
-                                                : isDayOpen(group.day, completeDeadlineMin)
+                                                : open
                                                     ? `진행중 · ${group.tasks.length}개`
-                                                    : `마감 · ${group.tasks.filter(t => t.status === 'approved').length}/${group.tasks.length}개 완료`}
+                                                    : `❌ 실패 · 마감 ${group.tasks.filter(t => t.status === 'approved').length}/${group.tasks.length}개 완료`}
                                     </Text>
                                 </View>
                                 <Text style={[styles.chevron, expanded && styles.chevronUp]}>›</Text>
@@ -432,6 +457,9 @@ const styles = StyleSheet.create({
         borderLeftColor: colors.sun[500],
         backgroundColor: colors.sun[300] + '55',
     },
+    dayHeaderFail: {
+        borderLeftColor: colors.coral[500],
+    },
     dayHeaderExpanded: {
         borderBottomLeftRadius: 0,
         borderBottomRightRadius: 0,
@@ -449,6 +477,7 @@ const styles = StyleSheet.create({
     },
     daySummaryPending: { color: colors.sun[700] },
     daySummaryDone:    { color: colors.ocean[500] },
+    daySummaryFail:    { color: colors.coral[700] },
     chevron: {
         fontSize: 22,
         color: colors.ink[300],
