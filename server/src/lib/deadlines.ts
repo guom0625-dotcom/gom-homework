@@ -7,11 +7,11 @@ export interface Deadlines {
     complete_deadline_min: number;  // 완료 상신 마감 = 다이아 지급 시각 (다음날 정오까지 가능)
 }
 
-// 등록 마감은 일단 꺼 둔다. 다시 쓰려면 server/.env 에 REGISTER_DEADLINE_ENABLED=true 를 넣고 서버를 재시작
+// 등록 마감은 server/.env 의 REGISTER_DEADLINE_ENABLED=true 로 켠다 (2026-11-17 켬 — 17시까지 계획 상신 안 하면 그날 실패)
 // (앱은 /me 로 이 값을 받아 화면을 맞추므로 새 빌드가 필요 없다)
 export const REGISTER_DEADLINE_ENABLED = process.env.REGISTER_DEADLINE_ENABLED === 'true';
 
-export const DEFAULT_DEADLINES: Deadlines = { register_deadline_min: 1440, complete_deadline_min: 1800 };
+export const DEFAULT_DEADLINES: Deadlines = { register_deadline_min: 1020, complete_deadline_min: 1800 };
 export const MAX_REGISTER_MIN = 1440;
 export const MAX_COMPLETE_MIN = 2160;
 
